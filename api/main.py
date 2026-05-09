@@ -46,6 +46,7 @@ INDUSTRIES: list[IndustryOut] = [
     IndustryOut(slug="food-service-australia", label="Food Service (Australia)",  pipeline="fs"),
     # ADB pipeline industries — extend as needed.
     IndustryOut(slug="apparel",                label="Apparel",                   pipeline="adb"),
+    IndustryOut(slug="b2b",                    label="B2B",                       pipeline="adb"),
     IndustryOut(slug="beauty",                 label="Beauty",                    pipeline="adb"),
     IndustryOut(slug="consumer-tech",          label="Consumer Tech",             pipeline="adb"),
 ]
