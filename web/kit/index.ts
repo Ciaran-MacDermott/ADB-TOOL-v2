@@ -13,3 +13,4 @@ export type { ChipTone } from "./components/ui/Chip";
 export { AppShell } from "./components/layout/AppShell";
 export { AppBar } from "./components/layout/AppBar";
 export { PageHeader } from "./components/layout/PageHeader";
+export { Wordmark } from "./components/layout/Wordmark";

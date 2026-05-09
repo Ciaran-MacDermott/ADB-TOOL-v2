@@ -13,6 +13,7 @@ import {
   CardTitle,
   Chip,
   PageHeader,
+  Wordmark,
 } from "@/kit";
 import { api, type Industry, type RunStatus } from "@/lib/api";
 
@@ -132,10 +133,8 @@ export default function Home() {
     <>
       <AppBar
         left={
-          <a href="/" className="flex items-center gap-3" aria-label="Circana home">
-            <span className="text-[19px] font-semibold tracking-tight text-brand-700">Circana</span>
-            <span className="text-zinc-300">/</span>
-            <span className="text-[19px] font-semibold tracking-tight">Deck Builder</span>
+          <a href="/" aria-label="Circana — Deck Builder home">
+            <Wordmark tag="Deck Builder" />
           </a>
         }
         right={
