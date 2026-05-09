@@ -1,0 +1,81 @@
+/* Generated from ~/Downloads/kit — do not edit directly. Edit the canonical file and re-run kit/sync.sh. */
+/* Circana component primitives — plain CSS using Tailwind @apply.
+ * Requires the Circana Tailwind preset (provides brand-*, ok, err, etc.)
+ * and circana.css (provides --hairline, --ink-*).
+ *
+ * Note: not wrapped in @layer components — when this file is @import'd
+ * into globals.css, the @layer would land before @tailwind components
+ * in the flattened output, which Tailwind rejects. Plain rules work
+ * fine; @apply is processed regardless of layer membership.
+ */
+
+/* ── Surfaces ──────────────────────────────────────────────────────── */
+.surface-card {
+  @apply rounded-2xl bg-white/80 border;
+  border-color: var(--hairline);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: saturate(160%) blur(8px);
+  -webkit-backdrop-filter: saturate(160%) blur(8px);
+  transition: box-shadow var(--motion-base) var(--ease-out-soft);
+}
+.surface-card:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+.surface-card-quiet {
+  @apply rounded-xl bg-white border;
+  border-color: var(--hairline);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+.btn-base {
+  @apply inline-flex items-center justify-center gap-2
+         rounded-lg text-sm font-medium px-4 py-2
+         transition-all duration-150
+         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+         focus-visible:ring-brand-600 focus-visible:ring-offset-white
+         active:scale-[0.98]
+         disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+}
+.btn-primary {
+  @apply btn-base bg-brand-700 text-white hover:bg-brand-600 shadow-btn-primary;
+}
+.btn-success {
+  @apply btn-base bg-ok text-white hover:bg-okd shadow-btn-success;
+}
+.btn-secondary {
+  @apply btn-base bg-white text-zinc-800 border border-zinc-200
+         hover:bg-zinc-50 hover:border-zinc-300;
+}
+.btn-ghost {
+  @apply btn-base bg-transparent text-zinc-600
+         hover:bg-zinc-100 hover:text-zinc-900;
+}
+.btn-danger-outline {
+  @apply btn-base border border-err text-err hover:bg-err hover:text-white;
+}
+
+/* ── Status chip ───────────────────────────────────────────────────── */
+.chip {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5
+         text-[11px] font-medium uppercase tracking-wide;
+}
+.chip-dot {
+  @apply h-1.5 w-1.5 rounded-full;
+}
+
+/* ── Slim app bar ──────────────────────────────────────────────────── */
+.app-bar {
+  @apply sticky top-0 z-30 border-b backdrop-blur-md bg-white/70;
+  border-color: var(--hairline);
+}
+
+/* ── Motion ───────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .fade-in-up {
+    animation: cui-fade-in-up 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes cui-fade-in-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}

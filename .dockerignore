@@ -1,0 +1,14 @@
+.git/
+.venv/
+venv/
+node_modules/
+web/.next/
+web/out/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.local
+docs/
+tests/
+legacy/

@@ -1,0 +1,27 @@
+{
+  "name": "adb-tool-web",
+  "private": true,
+  "scripts": {
+    "kit:sync": "bash ../../kit/sync.sh ../",
+    "dev": "next dev",
+    "predev": "npm run kit:sync",
+    "build": "next build",
+    "prebuild": "npm run kit:sync",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.0.0"
+  }
+}

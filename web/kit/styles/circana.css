@@ -1,0 +1,68 @@
+/* Generated from ~/Downloads/kit — do not edit directly. Edit the canonical file and re-run kit/sync.sh. */
+/* Circana design tokens + base typography + aurora background.
+ * Import once per app, alongside Tailwind directives.
+ *
+ *   @tailwind base;
+ *   @tailwind components;
+ *   @tailwind utilities;
+ *   @import "circana-ui/styles/circana.css";
+ *   @import "circana-ui/styles/primitives.css";
+ */
+
+:root {
+  --surface-0: #FFFFFF;
+  --surface-1: rgba(255, 255, 255, 0.72);
+  --surface-2: rgba(255, 255, 255, 0.55);
+  --hairline:        rgba(15, 23, 42, 0.06);
+  --hairline-strong: rgba(15, 23, 42, 0.10);
+
+  --ink-1: #0F172A;
+  --ink-2: #334155;
+  --ink-3: #64748B;
+
+  --brand-700: #3A0D54;
+  --brand-600: #4E106F;
+  --brand-500: #6A1A94;
+
+  --radius-btn:  0.5rem;
+  --radius-card: 1rem;
+
+  --shadow-card:        0 1px 0 rgba(15, 23, 42, 0.02), 0 6px 24px -12px rgba(15, 23, 42, 0.10);
+  --shadow-card-hover:  0 4px 16px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html {
+  font-size: 17px;
+}
+html, body {
+  font-family: var(--font-inter), "Inter", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  color: var(--ink-1);
+  background-color: #FAF7FB;
+  position: relative;
+  min-height: 100vh;
+}
+
+/* Aurora wash. Fixed-position pseudo-element so it doesn't repaint on scroll. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60rem 32rem at 90% -10%, rgba(78, 16, 111, 0.16), transparent 60%),
+    radial-gradient(50rem 28rem at -10% 10%, rgba(139, 93, 175, 0.14), transparent 55%),
+    radial-gradient(40rem 26rem at 50% 110%, rgba(232, 219, 242, 0.45), transparent 60%),
+    linear-gradient(180deg, #FAF7FB 0%, #F6F3F8 100%);
+  pointer-events: none;
+}

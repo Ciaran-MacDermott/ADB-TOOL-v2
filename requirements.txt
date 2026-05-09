@@ -1,0 +1,29 @@
+# Forecast Accuracy Deck Builder v2 — backend dependencies
+# Pin minor versions for reproducible builds; allow patch updates (~=)
+
+# Web framework
+fastapi>=0.110.0,<1.0.0
+uvicorn[standard]>=0.27.0,<1.0.0
+pydantic>=2.6.0,<3.0.0
+
+# Data
+pandas>=2.0.0,<3.0.0
+numpy>=1.24.0,<2.0.0
+openpyxl>=3.1.0,<4.0.0
+
+# PowerPoint
+python-pptx>=0.6.21,<1.0.0
+
+# HTTP (free LLM path: Groq + OpenRouter via direct requests)
+requests>=2.31.0,<3.0.0
+urllib3>=2.0.0,<3.0.0
+
+# Foodservice pipeline LLM clients (acc_deck_fs_pkg)
+groq>=0.11.0,<1.0.0
+openai>=1.40.0,<2.0.0
+
+# NPD SSO login (Selenium + Chromium — system Chromium installed via Dockerfile)
+selenium>=4.18.0,<5.0.0
+
+# Local dev — load .env file (no-op in Docker where secrets are real env vars)
+python-dotenv>=1.0.0,<2.0.0

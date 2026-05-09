@@ -1,0 +1,145 @@
+{
+  "version": "1.0.1",
+  "description": "Forecast Accuracy Deck Configuration (creative-robust tuning)",
+
+  "assets": {
+    "ppt_template": "template.pptx"
+  },
+
+  "column_mapping": {
+    "actual": {
+      "level1": "project",
+      "level2": "highlevelrollup",
+      "units": "units_actual",
+      "dollars": "dollars_actual"
+    },
+    "forecast": {
+      "level1": "project",
+      "level2": "highlevelrollup",
+      "units": "units_final",
+      "dollars": "dollars_final"
+    },
+    "time": {
+      "quarter": "Quarter",
+      "year": "year",
+      "month": "month"
+    }
+
+
+  },
+
+  "sheet_names": {
+    "forecast": "DATA"
+  },
+
+  "llm_column_aliases": {
+    "cat": "category",
+    "f_asp": "Forecast_ASP",
+    "a_asp": "Actual_ASP",
+    "diff_asp": "Diff (%)_ASP",
+    "f_units": "Forecast_Units",
+    "a_units": "Actual_Units",
+    "diff_units": "Diff (%)_Units",
+    "f_dollars": "Forecast_Dollars",
+    "a_dollars": "Actual_Dollars",
+    "diff_dollars": "Diff (%)_Dollars"
+  },
+
+  "llm_provider": "free",
+
+  "free_llm": {
+    "groq_api_key_env":       "GROQ_API_KEY",
+    "openrouter_api_key_env": "OPENROUTER_API_KEY",
+    "moonshot_api_key_env":   "MOONSHOT_API_KEY",
+    "r1_model":               "openai/gpt-oss-120b",
+    "writer_model":           "kimi-k2.6"
+  },
+
+  "api": {
+    "key_env_var": "ANTHROPIC_API_KEY",
+    "default_model": "claude-sonnet-4-20250514",
+    "timeout": 60
+  },
+
+  "prompts": {
+    "system_prompt_file": "prompts/system_prompt.md",
+    "user_meta_prompt_file": "prompts/user_meta_prompt.md",
+    "total_slide_prompt_file": "prompts/total_slide_prompt.md",
+    "row_prompt_template_file": "prompts/row_prompt_template.md",
+    "sample_insights_total_csv": "prompt_data/total_samples.csv",
+    "sample_insights_meta_csv": "prompt_data/meta_samples.csv"
+  },
+
+  "prompt_sampling": {
+    "enabled": true,
+    "max_samples_meta": 6,
+    "max_samples_total": 3,
+    "max_samples_refine": 3
+  },
+
+  "model_params": {
+    "category_insights": {
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.55,
+      "top_p": 0.88,
+      "max_tokens": 280
+    },
+
+    "meta_insights": {
+      "model": "claude-opus-4-20250514",
+      "temperature": 0.80,
+      "top_p": 0.92,
+      "max_tokens": 300
+    },
+
+    "total_slide": {
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.7,
+      "top_p": 0.85,
+      "max_tokens": 250
+    },
+
+    "grammar_refine": {
+      "model": "claude-sonnet-4-20250514",
+      "temperature": 0.40,
+      "top_p": 0.88,
+      "max_tokens": 200
+    }
+  },
+
+  "post_processing": {
+    "max_percentage_points": 2,
+    "apply_tone_calibration": true,
+    "strip_banned_openers": true
+  },
+
+  "narrative_analysis": {
+    "enabled": true,
+    "look_back_slides": 4,
+    "variation_probability": 0.8,
+    "thresholds": {
+      "precision_pp": 2.0,
+      "tight_pp": 3.5,
+      "solid_pp": 5.0,
+      "contrast_tight_pp": 3.5,
+      "contrast_wide_pp": 8.0,
+      "significant_miss_pp": 12.0
+    },
+    "driver_difference_threshold_pp": 3.0,
+    "max_spotlight_categories": 2
+  },
+
+  "sheet_name_forecast": "DATA",
+  "sheet_name_actual": "DATA",
+
+  "industry_rules": {
+    "B2B Tech": {
+      "exclude_from_total": ["Cloud Platform Services", "Commercial Software", "Warranties & Services"]
+    },
+    "Footwear": {
+      "chart_excluded_categories": ["Accessories"]
+    }
+  }
+
+}
+

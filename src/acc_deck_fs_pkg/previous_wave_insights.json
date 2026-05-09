@@ -1,0 +1,27 @@
+{
+  "_comment": "Commercially approved reference insights per market per slide. These are the source-of-truth style/tone templates used to guide LLM generation. Update only when a new approved version replaces the current standard. Slide-name keys: total, segments, dayparts, service_modes, food_bev. null = no approved example available.",
+
+  "food-service": {
+    "total": "Restaurant traffic aligned with projections, deviating by just 0.2 percentage points. Average eater check and dollar trends also held steady, with less than one percentage point of variation, highlighting consistent performance and strong forecasting accuracy.",
+    "segments": "Actual traffic landed close to forecast across all restaurant segments, with fast casual restaurants showing the largest difference at just 0.9 percentage points. Quick service and full service restaurants tracked even more tightly to projections, reflecting strong forecast accuracy across the segment cut.",
+    "dayparts": "QSR dayparts stayed broadly in line with expectations, with variances ranging from 1.0 to 1.7 percentage points. Stronger-than-forecast P.M. snack and dinner traffic helped offset softer morning meal and lunch performance. FSR demonstrated notably higher precision, with all dayparts landing within 0.3 percentage points of forecast, reinforcing stable demand patterns.",
+    "service_modes": "FSR delivery traffic exceeded forecasts by 12.6 percentage points, the largest deviation across service modes and a clear sign of continued consumer movement toward off-premise convenience. QSR delivery also outpaced projections by 3.3 percentage points, indicating a similar shift within the segment. Meanwhile, FSR on-premises and QSR drive-thru traffic landed almost exactly on target.",
+    "food_bev": "Serving performance varied widely across food and beverage categories, with only carbonated soft drinks tracking within 0.8 percentage points of forecast. Regular CSD underperformed expectations by 2.8 percentage points while beef burgers and burgers (total) exceeded projections by 3.1 and 2.8 percentage points, revealing shifting consumer protein and beverage preferences."
+  },
+
+  "food-service-canada": {
+    "total": "Restaurant traffic aligned with projections, deviating by just 0.2 percentage points. Average eater cheque and dollar trends also held steady, with less than one percentage point of variation, highlighting consistent performance and strong forecasting accuracy.",
+    "segments": "All restaurant categories saw actual traffic exceed expectations in Q4, with full service restaurants showing the largest variance at 3.3 percentage points. Meanwhile, quick service restaurants aligned precisely with the forecast, deviating by just 0.1 percentage points.",
+    "dayparts": "QSR dayparts held within 2.7 percentage points of forecast, though P.M. snack experienced the widest gap. FSR saw lunch surge 9.4 percentage points above projections and P.M. snack fall short, reflecting divergent consumer occasion-based demand shifts.",
+    "service_modes": "QSR delivery traffic exceeded projections by 9.6 percentage points while drive-thru fell short, reflecting a continued shift toward off-premise convenience. In contrast, FSR results diverged sharply, with carry-out outperforming forecasts by 14.5 percentage points and delivery dropping nearly 20 percentage points, unlike QSR where carry-out stayed close to anticipated levels.",
+    "food_bev": "Several food and beverage categories tracked within 1 percentage point of forecast, highlighting strong forecast accuracy. Larger deviations emerged in chicken (total), French fries, and all other drinks, reflecting ongoing menu experimentation and shifting preferences."
+  },
+
+  "food-service-australia": {
+    "total": "Commercial foodservice traffic tracked in line with the forecast, while stronger‑than‑expected average eater cheque lifted dollar sales to 1.5 percentage points above projections, as pricing momentum offset stable unit demand.",
+    "segments": "Commercial foodservice traffic broadly aligned with forecasts, deviating by no more than 0.3 percentage points across segments. Quick service restaurants matched the forecast almost exactly, whereas full service restaurants dipped slightly below expectations, reflecting modest consumer pullback in dine-out frequency.",
+    "dayparts": "Dinner showed the largest gap, falling 6.3 percentage points below projections. Lunch outperformed with a 5.8 percentage point uplift tied to stronger midday demand and return‑to‑office routines. Morning meal and PM snack also came in below forecast, though to a lesser extent.",
+    "service_modes": "Delivery and pickup surpassed prior estimates in Q4, as on‑premises traffic fell short by 3.1 percentage points, reflecting consumers' continued pivot toward off‑premise convenience and away from dine‑in experiences.",
+    "food_bev": "Burgers (total) and chicken (total) servings surged 12.5 and 10.1 percentage points above forecast. Hot Drink demand finished 1.7 points above the projection, illustrating a pronounced consumer tilt toward indulgent, convenience items that outpaced more measured beverage uptake."
+  }
+}

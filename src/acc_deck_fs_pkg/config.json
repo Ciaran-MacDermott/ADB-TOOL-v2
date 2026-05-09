@@ -1,0 +1,25 @@
+{
+    "_note": "API keys are read from environment variables (GROQ_API_KEY, MOONSHOT_API_KEY) — never put keys here.",
+    "api": {
+        "timeout": 60
+    },
+
+    "models": {
+        "generation": {
+            "_note": "kimi-k2.6 in thinking-disabled mode hard-locks temperature=0.6 / top_p=0.95 server-side. Only max_tokens is honoured. Tighter max_tokens forces synthesis instead of enumeration.",
+            "provider": "moonshot",
+            "model": "kimi-k2.6",
+            "max_tokens": 150
+        }
+    },
+
+    "pipeline": {
+        "input_year": 2025,
+        "input_quarter": 4,
+        "metrics": ["dollars", "units", "asp"],
+        "generate_insights": true,
+        "max_retries": 3,
+        "base_delay": 2.0,
+        "word_limit": 55
+    }
+}
