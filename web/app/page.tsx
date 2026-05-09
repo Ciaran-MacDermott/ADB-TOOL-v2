@@ -28,6 +28,14 @@ const STATE_TONE: Record<RunStatus["state"], "info" | "success" | "warning" | "e
 };
 
 export default function Home() {
+  // ── Connect state ──────────────────────────────────────────────────────
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  // ── Run params ─────────────────────────────────────────────────────────
   const [industries, setIndustries] = useState<Industry[]>([]);
   const [industry, setIndustry] = useState<string>("");
   const [year, setYear] = useState<number>(2026);
@@ -38,38 +46,72 @@ export default function Home() {
   const [insightMode, setInsightMode] = useState<"direct" | "traditional">("direct");
   const [categoryOrder, setCategoryOrder] = useState<"sales_volume" | "alphabetical">("sales_volume");
 
+  // ── Run state ──────────────────────────────────────────────────────────
   const [run, setRun] = useState<RunStatus | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
 
+  const connected = !!token;
+  const selectedIndustry = industries.find((i) => i.slug === industry);
+  const isFs = selectedIndustry?.pipeline === "fs";
+
+  // Load industries once we have a token.
   useEffect(() => {
-    api.industries()
+    if (!token) {
+      setIndustries([]);
+      setIndustry("");
+      return;
+    }
+    api.industries(token)
       .then((rows) => {
         setIndustries(rows);
         if (rows[0]) setIndustry(rows[0].slug);
       })
-      .catch((e) => setError(String(e)));
-  }, []);
+      .catch((e) => setConnectError(String(e)));
+  }, [token]);
 
+  // Poll run status while a run is in flight.
   useEffect(() => {
-    if (!run || run.state === "done" || run.state === "error" || run.state === "cancelled") return;
+    if (!run || !token) return;
+    if (run.state === "done" || run.state === "error" || run.state === "cancelled") return;
     const id = setInterval(async () => {
       try {
-        const next = await api.getRun(run.run_id);
+        const next = await api.getRun(token, run.run_id);
         setRun(next);
       } catch (e) {
-        setError(String(e));
+        setRunError(String(e));
         clearInterval(id);
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [run]);
+  }, [run, token]);
+
+  async function onConnect() {
+    setConnectError(null);
+    setConnecting(true);
+    try {
+      const res = await api.connect(username, password);
+      setToken(res.session_token);
+    } catch (e) {
+      setConnectError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function onDisconnect() {
+    if (token) await api.disconnect(token).catch(() => undefined);
+    setToken(null);
+    setRun(null);
+    setRunError(null);
+  }
 
   async function onRun() {
-    setError(null);
+    if (!token) return;
+    setRunError(null);
     setSubmitting(true);
     try {
-      const { run_id } = await api.startRun({
+      const { run_id } = await api.startRun(token, {
         industry,
         year,
         quarter,
@@ -77,10 +119,10 @@ export default function Home() {
         insight_mode: insightMode,
         category_order: categoryOrder,
       });
-      const initial = await api.getRun(run_id);
+      const initial = await api.getRun(token, run_id);
       setRun(initial);
     } catch (e) {
-      setError(String(e));
+      setRunError(e instanceof Error ? e.message : String(e));
     } finally {
       setSubmitting(false);
     }
@@ -96,49 +138,129 @@ export default function Home() {
             <span className="text-[19px] font-semibold tracking-tight">Deck Builder</span>
           </a>
         }
+        right={
+          connected ? (
+            <>
+              <Chip tone="success">Connected — {username || "session"}</Chip>
+              <Button variant="ghost" onClick={onDisconnect}>Disconnect</Button>
+            </>
+          ) : (
+            <Chip tone="neutral">Not connected</Chip>
+          )
+        }
       />
 
       <AppShell>
         <PageHeader
           eyebrow="Forecast accuracy"
           title="Generate a deck"
-          subtitle="Pull the latest forecast vs actuals from the NPD Future of dashboard and produce a Circana-branded PowerPoint."
+          subtitle="Connect to NPD, pick the wave and industry, and produce a Circana-branded PowerPoint."
         />
 
-        {error && (
-          <Card variant="quiet" className="mb-6 border-red-200 bg-red-50/60">
-            <p className="text-sm text-red-800">{error}</p>
+        {/* ── Step 1: Connect ─────────────────────────────────────────── */}
+        <Card className="mb-5">
+          <CardHeader>
+            <CardTitle>1 — Connect to NPD</CardTitle>
+            {connected
+              ? <Badge tone="success">Authenticated</Badge>
+              : <Badge tone="neutral">Required</Badge>}
+          </CardHeader>
+          <CardDescription>
+            Live API mode. Industries and runs are scoped to your NPD session.
+          </CardDescription>
+
+          {!connected ? (
+            <>
+              <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                <Field label="NPD username">
+                  <input
+                    className={inputCls}
+                    type="email"
+                    autoComplete="username"
+                    placeholder="your@email.com"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && username && password && onConnect()}
+                  />
+                </Field>
+                <Field label="NPD password">
+                  <input
+                    className={inputCls}
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && username && password && onConnect()}
+                  />
+                </Field>
+                <Button
+                  variant="primary"
+                  disabled={connecting || !username || !password}
+                  onClick={onConnect}
+                >
+                  {connecting ? "Connecting…" : "Connect"}
+                </Button>
+              </div>
+              {connectError && (
+                <p className="mt-3 text-sm text-red-700">{connectError}</p>
+              )}
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-zinc-600">
+              Signed in as <strong>{username || "session"}</strong>. {industries.length} industries available.
+            </p>
+          )}
+        </Card>
+
+        {/* ── Step 2: Run params ──────────────────────────────────────── */}
+        {runError && (
+          <Card variant="quiet" className="mb-5 border-red-200 bg-red-50/60">
+            <p className="text-sm text-red-800">{runError}</p>
           </Card>
         )}
 
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-          <Card>
+          <Card aria-disabled={!connected} className={!connected ? "opacity-60 pointer-events-none" : ""}>
             <CardHeader>
-              <CardTitle>Run parameters</CardTitle>
-              <Chip tone="info">Required</Chip>
+              <CardTitle>2 — Run parameters</CardTitle>
+              {selectedIndustry && (
+                <Chip tone={isFs ? "info" : "neutral"}>
+                  {isFs ? "Foodservice pipeline" : "ADB pipeline"}
+                </Chip>
+              )}
             </CardHeader>
             <CardDescription>
               Match the wave and release date to the dashboard release you want to report on.
+              {isFs && " Level filters are skipped for the foodservice pipeline."}
             </CardDescription>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <Field label="Industry">
-                <select className={selectCls} value={industry} onChange={(e) => setIndustry(e.target.value)}>
-                  {industries.map((i) => <option key={i.slug} value={i.slug}>{i.label}</option>)}
+                <select
+                  className={inputCls}
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value)}
+                  disabled={!connected}
+                >
+                  {industries.map((i) => (
+                    <option key={i.slug} value={i.slug}>{i.label}</option>
+                  ))}
                 </select>
               </Field>
 
               <Field label="Accuracy year">
-                <select className={selectCls} value={year} onChange={(e) => setYear(Number(e.target.value))}>
+                <select className={inputCls} value={year} onChange={(e) => setYear(Number(e.target.value))} disabled={!connected}>
                   {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
               </Field>
 
               <Field label="Quarter">
                 <select
-                  className={selectCls}
+                  className={inputCls}
                   value={quarter}
                   onChange={(e) => setQuarter(e.target.value as typeof QUARTERS[number])}
+                  disabled={!connected}
                 >
                   {QUARTERS.map((q) => <option key={q} value={q}>{q}</option>)}
                 </select>
@@ -146,18 +268,20 @@ export default function Home() {
 
               <Field label="Release date (mm/yyyy)">
                 <input
-                  className={selectCls}
+                  className={inputCls}
                   value={releaseDate}
                   onChange={(e) => setReleaseDate(e.target.value)}
                   placeholder="05/2026"
+                  disabled={!connected}
                 />
               </Field>
 
               <Field label="Category order">
                 <select
-                  className={selectCls}
+                  className={inputCls}
                   value={categoryOrder}
                   onChange={(e) => setCategoryOrder(e.target.value as "sales_volume" | "alphabetical")}
+                  disabled={!connected}
                 >
                   <option value="sales_volume">Sales volume (recommended)</option>
                   <option value="alphabetical">Alphabetical</option>
@@ -166,9 +290,10 @@ export default function Home() {
 
               <Field label="Insight mode">
                 <select
-                  className={selectCls}
+                  className={inputCls}
                   value={insightMode}
                   onChange={(e) => setInsightMode(e.target.value as "direct" | "traditional")}
+                  disabled={!connected}
                 >
                   <option value="direct">Direct (recommended)</option>
                   <option value="traditional">Traditional</option>
@@ -179,7 +304,7 @@ export default function Home() {
             <div className="mt-6 flex justify-end gap-2">
               <Button
                 variant="primary"
-                disabled={submitting || !industry || run?.state === "running"}
+                disabled={!connected || submitting || !industry || run?.state === "running"}
                 onClick={onRun}
               >
                 {submitting ? "Starting…" : "Run pipeline"}
@@ -193,7 +318,9 @@ export default function Home() {
               {run && <Badge tone={STATE_TONE[run.state]}>{run.state}</Badge>}
             </CardHeader>
             {!run ? (
-              <CardDescription>No run yet. Submit the form to start.</CardDescription>
+              <CardDescription>
+                {connected ? "No run yet. Submit the form to start." : "Connect to NPD to begin."}
+              </CardDescription>
             ) : (
               <div className="space-y-2 text-sm">
                 <Row label="Run ID"  value={<code className="text-xs">{run.run_id}</code>} />
@@ -219,9 +346,10 @@ export default function Home() {
   );
 }
 
-const selectCls =
+const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm " +
-  "focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 transition-colors";
+  "focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 " +
+  "disabled:bg-zinc-50 disabled:text-zinc-400 transition-colors";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

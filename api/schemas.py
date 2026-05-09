@@ -10,6 +10,17 @@ InsightMode = Literal["direct", "traditional"]
 CategoryOrder = Literal["sales_volume", "alphabetical"]
 
 
+class ConnectRequest(BaseModel):
+    username: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+
+class ConnectResponse(BaseModel):
+    session_token: str
+    username:      str
+    expires_at:    float
+
+
 class IndustryOut(BaseModel):
     slug: str
     label: str

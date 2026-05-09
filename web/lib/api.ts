@@ -3,6 +3,13 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+// ── Types ────────────────────────────────────────────────────────────────
+export type ConnectResponse = {
+  session_token: string;
+  username:      string;
+  expires_at:    number;
+};
+
 export type Industry = {
   slug: string;
   label: string;
@@ -30,23 +37,54 @@ export type RunStatus = {
   elapsed_s: number;
 };
 
+// ── Helpers ──────────────────────────────────────────────────────────────
+function authHeaders(token: string | null): HeadersInit {
+  return token ? { "X-Session-Token": token } : {};
+}
+
 async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let detail: string;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? `${res.status} ${res.statusText}`;
+    } catch {
+      detail = `${res.status} ${res.statusText}`;
+    }
+    throw new Error(detail);
+  }
   return res.json() as Promise<T>;
 }
 
+// ── Endpoints ────────────────────────────────────────────────────────────
 export const api = {
-  industries: () => fetch(`${BASE}/api/industries`).then(json<Industry[]>),
-
-  startRun: (body: RunRequest) =>
-    fetch(`${BASE}/api/runs`, {
+  connect: (username: string, password: string) =>
+    fetch(`${BASE}/api/connect`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    }).then(json<ConnectResponse>),
+
+  disconnect: (token: string) =>
+    fetch(`${BASE}/api/disconnect`, {
+      method: "POST",
+      headers: authHeaders(token),
+    }),
+
+  industries: (token: string) =>
+    fetch(`${BASE}/api/industries`, { headers: authHeaders(token) })
+      .then(json<Industry[]>),
+
+  startRun: (token: string, body: RunRequest) =>
+    fetch(`${BASE}/api/runs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders(token) },
       body: JSON.stringify(body),
     }).then(json<{ run_id: string }>),
 
-  getRun: (runId: string) =>
-    fetch(`${BASE}/api/runs/${runId}`).then(json<RunStatus>),
+  getRun: (token: string, runId: string) =>
+    fetch(`${BASE}/api/runs/${runId}`, { headers: authHeaders(token) })
+      .then(json<RunStatus>),
 
   downloadUrl: (runId: string) => `${BASE}/api/runs/${runId}/download`,
 };

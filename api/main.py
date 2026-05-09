@@ -17,7 +17,7 @@ import sys
 import threading
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,7 +26,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from api import runs as run_registry
-from api.schemas import IndustryOut, RunRequest, RunResponse, RunStatus
+from api import sessions as session_registry
+from api.schemas import (
+    ConnectRequest,
+    ConnectResponse,
+    IndustryOut,
+    RunRequest,
+    RunResponse,
+    RunStatus,
+)
 
 # ── Industry catalogue ────────────────────────────────────────────────────
 # Hard-coded for v2 scaffold; move to config/industries.yaml when the front-end
@@ -49,7 +57,20 @@ app.add_middleware(
     allow_origins=["http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+
+def _require_session(token: str | None) -> session_registry.Session:
+    """Auth dependency for endpoints that need an NPD session. Mirrors v1
+    Streamlit semantics where you can't list industries (or run) before
+    completing the Connect step."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Connect first.")
+    sess = session_registry.get(token)
+    if not sess:
+        raise HTTPException(status_code=401, detail="Session expired or invalid.")
+    return sess
 
 
 @app.get("/api/health")
@@ -57,16 +78,49 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/api/connect", response_model=ConnectResponse)
+def connect(req: ConnectRequest):
+    """Authenticate against the NPD Future of dashboard.
+
+    Scaffold behaviour: any non-empty username/password mints a session.
+    Wire the real SSO call (src.acc_deck_pkg.api_extractor.sso_login or
+    src.acc_deck_fs_pkg.api_extractor_v2 — both use Selenium + Chromium)
+    here, and stash the resulting cookies / requests.Session on
+    sess.npd_handle for the run worker to reuse.
+    """
+    # TODO: invoke NPD SSO login. Map credential failures to HTTPException(401).
+    sess = session_registry.new_session(username=req.username)
+    return ConnectResponse(
+        session_token=sess.token,
+        username=sess.username,
+        expires_at=sess.expires_at,
+    )
+
+
+@app.post("/api/disconnect")
+def disconnect(x_session_token: str | None = Header(default=None)):
+    if x_session_token:
+        session_registry.revoke(x_session_token)
+    return {"status": "ok"}
+
+
 @app.get("/api/industries", response_model=list[IndustryOut])
-def list_industries():
+def list_industries(x_session_token: str | None = Header(default=None)):
+    """Authenticated. v1 fetches industries from NPD post-connect; for the
+    scaffold we return the static catalogue, but only after a valid session
+    exists — matches the v1 UX where the dropdown is empty until Connect
+    succeeds."""
+    _require_session(x_session_token)
     return INDUSTRIES
 
 
 @app.post("/api/runs", response_model=RunResponse)
-def start_run(req: RunRequest):
+def start_run(req: RunRequest, x_session_token: str | None = Header(default=None)):
     """Kick off a deck build. Returns immediately with a run_id; the client
     polls /api/runs/{id} for progress and downloads via /api/runs/{id}/download
     once state == 'done'."""
+    sess = _require_session(x_session_token)
+
     industry = next((i for i in INDUSTRIES if i.slug == req.industry), None)
     if industry is None:
         raise HTTPException(status_code=400, detail=f"Unknown industry: {req.industry}")
