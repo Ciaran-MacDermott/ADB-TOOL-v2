@@ -6,7 +6,7 @@
     "dev": "next dev",
     "predev": "npm run kit:sync",
     "build": "next build",
-    "prebuild": "npm run kit:sync",
+    "prebuild": "[ -f ../../kit/sync.sh ] && npm run kit:sync || echo 'kit/sync.sh not found (Docker/CI build) — using committed web/kit/'",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },
