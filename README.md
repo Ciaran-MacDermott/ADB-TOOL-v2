@@ -61,7 +61,7 @@ docker run -p 8002:8002 --env-file .env adb-tool-v2
 
 ## UI components — `web/kit/`
 
-The `web/kit/` folder holds the shared UI primitives (Button, Card, AppShell, etc.) used across the app. It's committed in-tree, so `git clone` + `npm install` is everything a new contributor needs — no extra fetch step. Edit files there directly; treat it like any other source folder.
+The `web/kit/` folder holds the shared UI primitives (Button, Card, AppShell, Wordmark, etc.) used across the app. It's a small in-house toolkit shared across a few sibling tools to keep the look and feel consistent — but it's vendored into this repo as plain source, so `git clone` + `npm install` is everything a new contributor needs. No extra fetch, no private package registry, no submodules. Edit files under `web/kit/` directly; treat it like any other source folder. Improvements you make here are welcome to flow back upstream.
 
 ## LLM provider — `src/llm/`
 
