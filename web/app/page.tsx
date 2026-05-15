@@ -306,7 +306,7 @@ export default function Home() {
             </span>
           }
           title="Generate a deck"
-          subtitle="Connect to NPD, pick the wave and industry, and produce a Circana-branded PowerPoint."
+          subtitle="Connect via NPD credentials, pick the time periods, industry and required filters, and run Pipeline. You can view logs and download the deck after."
         />
 
         {/* ── Step 1: Connect (full width) ─────────────────────────────── */}
