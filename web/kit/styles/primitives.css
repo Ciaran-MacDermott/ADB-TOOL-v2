@@ -63,6 +63,67 @@
   @apply h-1.5 w-1.5 rounded-full;
 }
 
+/* ── Form inputs ───────────────────────────────────────────────────── */
+/* Base style for text-style inputs (input, select, textarea). Owns the
+ * border, padding, focus ring, and disabled treatment so every form
+ * primitive renders identically without each one re-stating it. */
+.input-base {
+  @apply block w-full rounded-lg border bg-white px-3 py-2 text-sm
+         text-zinc-900 placeholder:text-zinc-400
+         transition-colors duration-150
+         focus:outline-none focus:border-brand-500 focus:ring-2
+         focus:ring-brand-500/30
+         disabled:bg-zinc-50 disabled:text-zinc-500 disabled:cursor-not-allowed;
+  border-color: var(--hairline-strong);
+}
+.input-base:focus { border-color: var(--brand-500); }
+.input-error {
+  @apply border-red-300 focus:border-red-500 focus:ring-red-500/30;
+}
+
+/* Field label — paired with .input-base inside <Field>. */
+.field-label {
+  @apply block text-xs font-medium text-zinc-700 mb-1.5
+         uppercase tracking-wide;
+}
+.field-hint {
+  @apply mt-1 text-xs text-zinc-500;
+}
+.field-error {
+  @apply mt-1 text-xs text-red-600;
+}
+
+/* ── Disclosure (collapsible section with colored dot summary) ─────── */
+.disclosure {
+  @apply rounded-xl border bg-white/60 overflow-hidden;
+  border-color: var(--hairline);
+}
+.disclosure > summary {
+  @apply flex items-center gap-2 px-4 py-3 cursor-pointer select-none
+         text-sm font-medium text-zinc-700 hover:bg-zinc-50/70;
+  list-style: none;
+}
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure[open] > summary { @apply border-b border-[color:var(--hairline)]; }
+.disclosure-body { @apply px-4 py-3; }
+
+/* ── Modal/Overlay ─────────────────────────────────────────────────── */
+.overlay-backdrop {
+  @apply fixed inset-0 z-50 bg-zinc-900/40 backdrop-blur-sm
+         flex items-center justify-center p-4;
+  animation: cui-fade-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.overlay-panel {
+  @apply rounded-2xl bg-white shadow-2xl w-full max-w-lg
+         border border-[color:var(--hairline-strong)] overflow-hidden;
+  animation: cui-pop-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes cui-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cui-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
 /* ── Slim app bar ──────────────────────────────────────────────────── */
 .app-bar {
   @apply sticky top-0 z-30 border-b backdrop-blur-md bg-white/70;
