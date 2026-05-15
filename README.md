@@ -63,6 +63,8 @@ docker run -p 8002:8002 --env-file .env adb-tool-v2
 
 The `web/kit/` folder holds the shared UI primitives (Button, Card, AppShell, Wordmark, etc.) used across the app. It's a small in-house toolkit shared across a few sibling tools to keep the look and feel consistent — but it's vendored into this repo as plain source, so `git clone` + `npm install` is everything a new contributor needs. No extra fetch, no private package registry, no submodules. Edit files under `web/kit/` directly; treat it like any other source folder. Improvements you make here are welcome to flow back upstream.
 
+The kit currently carries Circana branding — the logo (`web/public/Circana_logo.png`), the brand palette in `web/kit/tailwind-preset.ts`, and the design tokens in `web/kit/styles/circana.css` and `primitives.css`. The `Wordmark` component defaults to the Circana logo, and the generated deck output is intentionally Circana-styled. If you ever want a brand-neutral fork, the swap surface is small: replace the logo asset, retheme the Tailwind preset, and the two CSS token files.
+
 ## LLM provider — `src/llm/`
 
 Every model invocation goes through `llm.complete(profile, messages, ...)`. The pipeline (`acc_deck_pkg`, `acc_deck_fs_pkg`) never imports `requests`, `groq`, `openai`, or `anthropic` directly — that means swapping the LLM endpoint to internally-hosted models is a one-file change. See `src/llm/README.md` for the migration walkthrough.
