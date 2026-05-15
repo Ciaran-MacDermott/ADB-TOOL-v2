@@ -111,20 +111,9 @@ If `src/llm/providers/internal_stub.py` is later wired to an internal LLM endpoi
 
 ## Concurrent users
 
-The server is built to handle a small team hitting it at the same time without falling over. Each deck build runs in its own worker thread, but only `MAX_RUN_SLOTS` (default **3**, override via `ADB_MAX_RUN_SLOTS`) can be in flight at once — anything beyond that sits in `state="queued"` until a slot opens.
+Up to **3 deck builds** can run at the same time — plenty for a small internal tool. Beyond that, runs queue up and the UI shows position + ETA (projected from the rolling median of recent durations) rather than a frozen spinner. Override the cap with `ADB_MAX_RUN_SLOTS` if you ever need to.
 
-Queued users see useful feedback rather than a frozen spinner:
-
-- `queue_position` and `queue_depth` — "Position 2 of 4".
-- `eta_seconds` — projected from a rolling median of the last ~20 successful runs (only shown once all slots are full).
-
-Other concurrency hygiene built into `api/runs.py`:
-
-- **Per-record locks** so concurrent pollers never see torn state from the worker thread.
-- **Idle-TTL eviction** (1 hour) — abandoned runs get reaped so memory doesn't grow unbounded. A daemon thread sweeps every minute.
-- **Touch-on-read** — any API poll or worker progress refreshes the run's last-touched timestamp, so an actively-watched deck never gets evicted mid-build.
-
-The default cap of 3 is sized for a 2-vCPU HF Space (Chromium-for-NPD-SSO is the dominant resource per run). Bump it on a beefier host.
+Implementation lives in `api/runs.py`: a `BoundedSemaphore` for the slot cap, per-record locks for clean status snapshots, and a 1-hour idle-TTL reaper that cleans up abandoned runs.
 
 ## Migrating from v1
 
