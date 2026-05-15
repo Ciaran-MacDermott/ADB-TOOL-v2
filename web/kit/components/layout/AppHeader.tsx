@@ -1,4 +1,3 @@
-// Generated from ~/Downloads/kit — do not edit directly. Edit the canonical file and re-run kit/sync.sh.
 import type { ReactNode } from "react";
 import { AppBar } from "./AppBar";
 import { Wordmark } from "./Wordmark";

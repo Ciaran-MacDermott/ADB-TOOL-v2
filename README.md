@@ -2,7 +2,7 @@
 
 Generates PowerPoint forecast vs actuals accuracy decks from live NPD Future of dashboard data.
 
-**v2** = same domain logic as the original [ADB-TOOL](https://github.com/Ciaran-MacDermott/ADB-TOOL), rebuilt on the Circana React + FastAPI shape (matches `data_ingester` and `AIC`). Streamlit replaced with a Next.js frontend served by the FastAPI BFF on a single port.
+**v2** = same domain logic as the original [ADB-TOOL](https://github.com/Ciaran-MacDermott/ADB-TOOL), rebuilt on a Next.js + FastAPI shape. Streamlit replaced with a Next.js frontend served by the FastAPI BFF on a single port.
 
 ## Layout
 
@@ -17,7 +17,7 @@ src/
 pipeline_config/     template.pptx, prompts, runtime config
 tests/               pytest suite
 web/                 Next.js 15 + React 19 + Tailwind frontend
-  kit/               synced from ~/Downloads/kit (don't edit directly)
+  kit/               shared UI components (committed in-tree)
   app/               routes
   lib/               api client + types
 docs/
@@ -31,47 +31,45 @@ Dockerfile           single-port image: builds web/out then runs uvicorn
 # Backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn api.main:app --reload --port 8000
+uvicorn api.main:app --reload --port 8002
 
 # Frontend (separate terminal)
 cd web
 npm install
-npm run dev          # runs predev kit:sync, starts Next on :3000
+npm run dev          # Next on :3002
 ```
 
-The frontend hits `http://localhost:8000` in dev (CORS-allowed by `api/main.py`).
+The frontend hits `http://localhost:8002` in dev (CORS-allowed by `api/main.py`).
+
+Ports 3002 / 8002 are chosen to avoid clashing with other local Next + FastAPI projects that run on the defaults 3000 / 8000.
+
+Copy `.env.example` to `.env` and fill in the values you need (NPD credentials, LLM provider keys). `.env` is gitignored — never commit real secrets.
 
 ## Production build
 
 ```bash
-cd web && npm run build         # produces web/out/
-uvicorn api.main:app --port 8000  # serves API + web/out at /
+cd web && npm run build           # produces web/out/
+uvicorn api.main:app --port 8002  # serves API + web/out at /
 ```
 
 Or via Docker:
 
 ```bash
 docker build -t adb-tool-v2 .
-docker run -p 8000:8000 --env-file .env adb-tool-v2
+docker run -p 8002:8002 --env-file .env adb-tool-v2
 ```
 
-## Circana kit
+## UI components — `web/kit/`
 
-The `web/kit/` folder is a **synced local copy** of `~/Downloads/kit`. Never edit `web/kit/` directly — edit the canonical files in `~/Downloads/kit/` and rerun:
-
-```bash
-bash ~/Downloads/kit/sync.sh ~/Downloads/ADB-TOOL-v2
-```
-
-The `web` package's `predev` and `prebuild` scripts run this automatically, so a fresh `npm run dev` or `npm run build` always uses the latest kit. See `~/Downloads/kit/README.md` for the full pattern.
+The `web/kit/` folder holds the shared UI primitives (Button, Card, AppShell, etc.) used across the app. It's committed in-tree, so `git clone` + `npm install` is everything a new contributor needs — no extra fetch step. Edit files there directly; treat it like any other source folder.
 
 ## LLM provider — `src/llm/`
 
-Every model invocation goes through `llm.complete(profile, messages, ...)`. The pipeline (`acc_deck_pkg`, `acc_deck_fs_pkg`) never imports `requests`, `groq`, `openai`, or `anthropic` directly — that means swapping the LLM endpoint to internally-hosted models is a one-file change. See `src/llm/README.md` for the 5-minute migration walkthrough.
+Every model invocation goes through `llm.complete(profile, messages, ...)`. The pipeline (`acc_deck_pkg`, `acc_deck_fs_pkg`) never imports `requests`, `groq`, `openai`, or `anthropic` directly — that means swapping the LLM endpoint to internally-hosted models is a one-file change. See `src/llm/README.md` for the migration walkthrough.
 
 ## Network policy
 
-**Build environment (DMZ host)** — needs egress to:
+**Build environment** — needs egress to:
 
 | Endpoint | Port | Purpose |
 |---|---|---|
@@ -81,25 +79,25 @@ Every model invocation goes through `llm.complete(profile, messages, ...)`. The 
 | `pypi.org`, `files.pythonhosted.org` | 443 | `pip install -r requirements.txt` |
 | `fonts.googleapis.com`, `fonts.gstatic.com` | 443 | `next/font/google` downloads Inter at build time and inlines it under `web/out/_next/static/media/` — runtime makes ZERO calls to Google Fonts |
 
-For walled-garden CI substitute internal registry mirrors as needed. The image artifact then ships into the walled garden.
+CI behind a restricted network can substitute internal registry mirrors as needed.
 
-**Runtime environment (walled-garden container)** — egress allowlist:
+**Runtime egress** (the container must be able to reach):
 
 | Endpoint | Port | Required when | Where to swap |
 |---|---|---|---|
 | `api.groq.com` | 443 | Today (LLM provider for `brief`, `fast_writer`, `total_subheader` profiles) | `src/llm/profiles.py` |
 | `api.moonshot.ai` | 443 | Today (Kimi K2.6 — `writer`, `cleanup`, `fs_insight` profiles) | `src/llm/profiles.py` |
-| `openrouter.ai` | 443 | Registered as a provider but no profile routes here — safe to omit from the allowlist | `src/llm/providers/__init__.py` |
+| `openrouter.ai` | 443 | Registered as a provider but no profile routes here — safe to omit | `src/llm/providers/__init__.py` |
 | `future-of.npd.com` | 443 | NPD External API, prod | env: `NPD_PROD_URL` |
 | `future-of-qa.npd.com` | 443 | NPD External API, QA | env: `NPD_QA_URL` |
 
-After the internal-LLM swap (see `src/llm/providers/internal_stub.py`), the three external LLM domains can be dropped from the runtime allowlist.
+If `src/llm/providers/internal_stub.py` is later wired to an internal LLM endpoint, the three external LLM domains can be dropped from the runtime allowlist.
 
 **Runtime ingress (inbound to the container):**
 
 | Port | Protocol | Purpose |
 |---|---|---|
-| `8000` | HTTP | FastAPI BFF — `/api/*` JSON + Next.js static export at `/`. Sits behind a TLS-terminating reverse proxy in production. |
+| `8002` | HTTP | FastAPI BFF — `/api/*` JSON + Next.js static export at `/`. Sits behind a TLS-terminating reverse proxy in production. |
 
 **Source-of-truth files** (read these to draft firewall rules — they're the only places network endpoints are declared):
 
@@ -107,7 +105,7 @@ After the internal-LLM swap (see `src/llm/providers/internal_stub.py`), the thre
 - `src/acc_deck_pkg/api_extractor.py` and `src/acc_deck_fs_pkg/api_extractor_v2.py` — NPD endpoints
 - `Dockerfile` — build-time + runtime port summary at the top
 
-**Templates are committed as regular binaries**, not LFS — both `src/acc_deck_fs_pkg/Templates/template.pptx` and `pipeline_config/pipeline_config/template.pptx` ship as real `.pptx` blobs in the git tree. Walled-garden CI without `git-lfs` access can clone and build without setup. If you ever re-add LFS tracking, restore those two files as regular blobs before pushing or the pipeline will fail at deck-generation time.
+**Templates are committed as regular binaries**, not LFS — both `src/acc_deck_fs_pkg/Templates/template.pptx` and `pipeline_config/pipeline_config/template.pptx` ship as real `.pptx` blobs in the git tree. CI without `git-lfs` access can clone and build without setup. If you ever re-add LFS tracking, restore those two files as regular blobs before pushing or the pipeline will fail at deck-generation time.
 
 ## Migrating from v1
 

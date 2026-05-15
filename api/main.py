@@ -2,7 +2,7 @@
 FastAPI BFF for the Forecast Accuracy Deck Builder (v2).
 
 Mirrors the data_ingester / AIC shape:
-  - Dev: Next runs on :3000 and hits this on :8000 (CORS allows it).
+  - Dev: Next runs on :3002 and hits this on :8002 (CORS allows it).
   - Prod: `npm run build` produces web/out/, FastAPI serves it at /,
     the whole app runs on a single port.
 
@@ -14,11 +14,11 @@ surface over it: kick off runs, poll status, download the PPTX.
 NETWORK POLICY
 ──────────────────────────────────────────────────────────────────────────
 Ingress (inbound to this process):
-  :8000 (HTTP) — /api/* JSON + the static frontend mounted at /. Sits
+  :8002 (HTTP) — /api/* JSON + the static frontend mounted at /. Sits
                  behind a TLS-terminating reverse proxy in production.
-  :3000 (HTTP) — only in dev (Next.js dev server with CORS allow).
+  :3002 (HTTP) — only in dev (Next.js dev server with CORS allow).
 
-Egress (outbound — must be on the walled-garden allowlist):
+Egress (outbound — must be reachable from the runtime environment):
   - LLM providers: see src/llm/providers/__init__.py for the current
     URLs (api.groq.com, api.moonshot.ai). Once the internal endpoint in
     src/llm/providers/internal_stub.py is wired, these can be removed
@@ -72,7 +72,7 @@ app = FastAPI(title="ADB Deck Builder API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3002"],
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -187,7 +187,7 @@ def download_run(run_id: str):
 
 
 # ── Static frontend (prod only) ───────────────────────────────────────────
-# In dev this directory may not exist — Next is serving on :3000.
+# In dev this directory may not exist — Next is serving on :3002.
 WEB_OUT = PROJECT_ROOT / "web" / "out"
 if WEB_OUT.exists():
     app.mount("/", StaticFiles(directory=str(WEB_OUT), html=True), name="web")

@@ -1,4 +1,3 @@
-// Generated from ~/Downloads/kit — do not edit directly. Edit the canonical file and re-run kit/sync.sh.
 import type { InputHTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 

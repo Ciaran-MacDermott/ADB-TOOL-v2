@@ -1,4 +1,3 @@
-// Generated from ~/Downloads/kit — do not edit directly. Edit the canonical file and re-run kit/sync.sh.
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";

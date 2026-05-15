@@ -2,12 +2,9 @@
   "name": "adb-tool-web",
   "private": true,
   "scripts": {
-    "kit:sync": "bash ../../kit/sync.sh ../",
-    "dev": "next dev",
-    "predev": "npm run kit:sync",
+    "dev": "next dev -p 3002",
     "build": "next build",
-    "prebuild": "[ -f ../../kit/sync.sh ] && npm run kit:sync || echo 'kit/sync.sh not found (Docker/CI build) — using committed web/kit/'",
-    "start": "next start",
+    "start": "next start -p 3002",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

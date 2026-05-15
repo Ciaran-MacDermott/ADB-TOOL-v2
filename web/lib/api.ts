@@ -1,7 +1,7 @@
 // Thin client for the FastAPI BFF.
-// In dev Next runs on :3000 and the API on :8000. In prod they share an origin.
+// In dev Next runs on :3002 and the API on :8002. In prod they share an origin.
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8002";
 
 // ── Types ────────────────────────────────────────────────────────────────
 export type ConnectResponse = {

@@ -18,12 +18,12 @@ After implementing, edit `llm/profiles.py` to point each profile's
 `provider` field at "internal" — no other files need changing.
 
 ──────────────────────────────────────────────────────────────────────────
-WALLED-GARDEN MIGRATION CHECKLIST
+INTERNAL-LLM MIGRATION CHECKLIST
 ──────────────────────────────────────────────────────────────────────────
 Wiring this file + repointing profiles.py is what eliminates the three
 external LLM domains (api.groq.com, api.moonshot.ai, openrouter.ai)
 from the runtime egress allowlist. Until then, those domains must stay
-on the walled-garden allowlist.
+reachable from the deployment environment.
 
   Step 1 (here):              base_url = "https://<your-internal-host>/v1/chat/completions"
                               env_var  = "INTERNAL_LLM_API_KEY"

@@ -1,4 +1,3 @@
-// Generated from ~/Downloads/kit — do not edit directly. Edit the canonical file and re-run kit/sync.sh.
 // Barrel export for the Circana kit. Local imports inside <app>/web/kit/.
 // Add new components here so app code can import them from "@/kit".
 
