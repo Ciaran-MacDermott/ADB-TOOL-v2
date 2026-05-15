@@ -1,48 +1,39 @@
 """
 llm_insights_free.py
 ====================
-Free-model drop-in for llm_insights_claude.py.
+Per-slide insight generation for the ADB pipeline.
 
-Architecture per meta slide (direct mode only — GPT analytical brief):
-  GPT (Groq openai/gpt-oss-120b, t=0.10) → structured analytical brief
-  Kimi A (Moonshot kimi-k2.6, t=1) → writes meta insight from brief
-  Kimi B (Moonshot kimi-k2.6, t=1) → deterministic cleanup pass
-  regex → strips rhetorical colons
+Architecture per meta slide (direct path only — see commit history for
+the old "traditional" branch removed May 2026):
+  brief    (Groq, openai/gpt-oss-120b)        → structured analytical brief
+  writer   (Moonshot, kimi-k2.6)              → writes meta insight from brief
+  cleanup  (Moonshot, kimi-k2.6)              → light proofreader pass
+  regex    → strips rhetorical colons / fixes case
 
-Total slide subheader: Llama direct call (Groq).
+Total slide subheader: total_subheader profile (Groq Llama).
 
-Stubs (never called in direct mode):
-  generate_llm_insights_remote()   — pass-through, returns df unchanged
-  generate_meta_slide_insights()   — pass-through, returns empty DataFrame
+Pass-through stubs (kept for back-compat with main_meta_modes.py imports):
+  generate_llm_insights_remote()   — returns df unchanged
+  generate_meta_slide_insights()   — returns empty DataFrame
 
-API keys are read from kwargs (groq_api_key / moonshot_api_key) or
-fall back to the module-level defaults below.
+All HTTP calls go through `llm.complete(profile=..., messages=...)`. To
+swap providers (e.g. internally-hosted models), edit src/llm/profiles.py
+— no changes needed in this file.
+
+Provider API keys are resolved by the providers themselves from env
+vars (GROQ_API_KEY, MOONSHOT_API_KEY); per-call overrides are still
+supported via the `*_api_key` kwargs that main_meta_modes.py forwards.
 """
 
 from __future__ import annotations
 
-import os
 import re
 import time
 from typing import Dict, List, Optional
 
 import pandas as pd
-import requests
 
-# ---------------------------------------------------------------------------
-# Default keys — read from environment; empty string causes a clear API error
-# ---------------------------------------------------------------------------
-_DEFAULT_GROQ_KEY       = os.getenv("GROQ_API_KEY", "")
-_DEFAULT_OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "")
-_DEFAULT_MOONSHOT_KEY   = os.getenv("MOONSHOT_API_KEY", "")
-
-_R1_MODEL    = "openai/gpt-oss-120b"
-_LLAMA_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-_KIMI_MODEL  = "kimi-k2.6"
-
-_OR_URL       = "https://openrouter.ai/api/v1/chat/completions"
-_GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
-_MOONSHOT_URL = "https://api.moonshot.ai/v1/chat/completions"
+from llm import complete as llm_complete
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -113,110 +104,10 @@ def _substitute_categories(text: str, categories: list) -> str:
     return text
 
 
-def _call_openrouter(
-    messages: list,
-    model: str = _R1_MODEL,
-    temperature: float = 0.10,
-    top_p: float = 0.95,
-    max_tokens: int = 2000,
-    api_key: str = _DEFAULT_OPENROUTER_KEY,
-    timeout: int = 90,
-    system: str = "",
-) -> str:
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    full_messages = (
-        [{"role": "system", "content": system}] + messages
-        if system
-        else messages
-    )
-    payload = {
-        "model": model,
-        "messages": full_messages,
-        "temperature": temperature,
-        "top_p": top_p,
-        "max_tokens": max_tokens,
-    }
-    resp = requests.post(_OR_URL, headers=headers, json=payload, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.json()
-    msg = data["choices"][0]["message"]
-    content = msg.get("content")
-    if not content:
-        finish_reason = data["choices"][0].get("finish_reason", "unknown")
-        print(f"  [R1 warn] content=null | finish_reason={finish_reason} | "
-              f"reasoning_content={'present' if msg.get('reasoning_content') else 'absent'} | "
-              f"usage={data.get('usage')}")
-        content = msg.get("reasoning_content") or ""
-    return _strip_think(content).strip()
-
-
-def _call_groq(
-    messages: list,
-    model: str = _LLAMA_MODEL,
-    temperature: float = 0.65,
-    top_p: float = 0.92,
-    max_tokens: int = 350,
-    api_key: str = _DEFAULT_GROQ_KEY,
-    timeout: int = 60,
-) -> str:
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        "top_p": top_p,
-        "max_tokens": max_tokens,
-    }
-    for attempt in range(4):
-        resp = requests.post(_GROQ_URL, headers=headers, json=payload, timeout=timeout)
-        if resp.status_code == 429:
-            wait = 10 * (2 ** attempt)   # 10s, 20s, 40s, 80s
-            print(f"  Groq 429 — waiting {wait}s before retry {attempt + 1}/3...")
-            time.sleep(wait)
-            continue
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-    resp.raise_for_status()  # raise on final failure
-
-
-def _call_moonshot(
-    messages: list,
-    model: str = _KIMI_MODEL,
-    max_tokens: int = 350,
-    api_key: str = _DEFAULT_MOONSHOT_KEY,
-    timeout: int = 60,
-) -> str:
-    # kimi-k2.6: temperature is fixed by the API based on mode — do not send it.
-    # Non-thinking mode (thinking disabled) uses fixed temperature=0.6.
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "messages": messages,
-        "thinking": {"type": "disabled"},
-        "max_tokens": max_tokens,
-    }
-    for attempt in range(4):
-        resp = requests.post(_MOONSHOT_URL, headers=headers, json=payload, timeout=timeout)
-        if resp.status_code == 429:
-            wait = 10 * (2 ** attempt)
-            print(f"  Moonshot 429 — body: {resp.text[:300]}")
-            print(f"  Waiting {wait}s before retry {attempt + 1}/3...")
-            time.sleep(wait)
-            continue
-        if not resp.ok:
-            print(f"  Moonshot {resp.status_code} error — body: {resp.text[:500]}")
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-    resp.raise_for_status()
+# NOTE: provider-specific HTTP calls used to live here as `_call_openrouter`,
+# `_call_groq`, and `_call_moonshot`. They were removed when src/llm/ was
+# introduced — every model invocation now goes through `llm_complete(profile=...)`.
+# To swap providers (e.g. internal hosting), edit src/llm/profiles.py.
 
 
 # ---------------------------------------------------------------------------
@@ -416,15 +307,12 @@ def _run_r1_brief(
         f"{_R1_OUTPUT_FORMAT}"
     )
 
-    return _call_groq(
+    return llm_complete(
+        "brief",
         messages=[
             {"role": "system", "content": system},
             {"role": "user",   "content": user_msg},
         ],
-        model=_R1_MODEL,
-        temperature=0.10,
-        top_p=0.95,
-        max_tokens=1800,
         api_key=groq_key,
         timeout=max(timeout, 60),
     )
@@ -449,15 +337,12 @@ def _run_kimi_direct(
         f"SLIDE DATA:\n{fact_block}\n\n"
         f"ANALYST CONTEXT:\n{user_meta_prompt or ''}"
     )
-    return _call_groq(
+    return llm_complete(
+        "fast_writer",
         messages=[
             {"role": "system", "content": _KIMI_A_DIRECT_SYSTEM},
             {"role": "user",   "content": user_msg},
         ],
-        model=_LLAMA_MODEL,
-        temperature=0.65,
-        top_p=0.92,
-        max_tokens=180,
         api_key=groq_key,
         timeout=timeout,
     )
@@ -469,13 +354,12 @@ def _run_kimi_write(brief: str, category_names: list, moonshot_key: str, timeout
         "ALLOWED CATEGORIES — use only these exact names, no others:\n"
         + "\n".join(f"- {c}" for c in category_names)
     )
-    return _call_moonshot(
+    return llm_complete(
+        "writer",
         messages=[
             {"role": "system", "content": _KIMI_A_SYSTEM},
             {"role": "user",   "content": f"{allowed}\n\nANALYTICAL BRIEF:\n\n{brief}"},
         ],
-        model=_KIMI_MODEL,
-        max_tokens=100,
         api_key=moonshot_key,
         timeout=timeout,
     )
@@ -494,20 +378,20 @@ def _run_kimi_cleanup(brief: str, draft: str, category_names: list, moonshot_key
         f"{brief_block}"
         f"DRAFT:\n{draft}"
     )
-    return _call_moonshot(
+    return llm_complete(
+        "cleanup",
         messages=[
             {"role": "system", "content": _KIMI_B_SYSTEM},
             {"role": "user",   "content": user_msg},
         ],
-        model=_KIMI_MODEL,
-        max_tokens=85,
         api_key=moonshot_key,
         timeout=timeout,
     )
 
 
 # ---------------------------------------------------------------------------
-# Public API — matching llm_insights_claude.py signatures
+# Public API — stable signatures for the pipeline (do not change without
+# updating main_meta_modes.py callers)
 # ---------------------------------------------------------------------------
 
 def generate_meta_slide_insights_from_data(
@@ -515,30 +399,33 @@ def generate_meta_slide_insights_from_data(
     collapsed_df: pd.DataFrame,
     system_prompt: str,
     user_meta_prompt: str,
-    api_key: str,                   # ignored — free provider uses own keys
-    model: str = _LLAMA_MODEL,       # ignored — models are fixed per stage
-    temperature: float = 0.65,      # ignored — temperatures are fixed per stage
+    api_key: str = "",              # ignored — providers resolve keys themselves
+    model: str = "",                # ignored — models are picked by llm/profiles.py
+    temperature: float = 0.65,      # ignored — temperatures are baked into profiles
     top_p: float = 0.92,            # ignored
     max_tokens: int = 300,          # ignored
     timeout: int = 60,
     sampled_examples: list = None,  # ignored — examples embedded in style guide
-    narrative_config: dict = None,  # ignored — R1 handles narrative holistically
+    narrative_config: dict = None,  # ignored — brief stage handles narrative holistically
     **kwargs
 ) -> pd.DataFrame:
     """
-    Generate meta-insights using GPT brief → Kimi A → Kimi B → regex, one pass per slide.
+    Generate meta-insights using brief → writer → cleanup → regex, one pass per slide.
 
     Flow:
-      GPT (Groq)  — receives style guide + raw data + previous insights → structured brief
-      Kimi A (Moonshot) — executes the brief → draft insight (40-50 words)
-      Kimi B (Moonshot) — verifies brief compliance + cleanup → final sentence
-      regex  — post-pass strip of rhetorical colons / whitespace
+      brief    (Groq)     — receives style guide + raw data + previous insights → structured brief
+      writer   (Moonshot) — executes the brief → draft insight (40–50 words)
+      cleanup  (Moonshot) — verifies brief compliance + cleanup → final sentence
+      regex    — post-pass strip of rhetorical colons / whitespace
 
     Returns DataFrame with columns: slide_id, meta_insight.
+
+    To swap any of the three model calls to internally-hosted endpoints,
+    edit src/llm/profiles.py — no changes needed in this function.
     """
-    groq_key     = kwargs.get("groq_api_key") or _DEFAULT_GROQ_KEY
-    or_key       = kwargs.get("openrouter_api_key") or _DEFAULT_OPENROUTER_KEY
-    moonshot_key = kwargs.get("moonshot_api_key") or _DEFAULT_MOONSHOT_KEY
+    # Per-call API key overrides (pass None → providers fall back to env).
+    groq_key     = kwargs.get("groq_api_key")
+    moonshot_key = kwargs.get("moonshot_api_key")
 
     # Build per-slide category metrics
     rows = []
@@ -570,8 +457,8 @@ def generate_meta_slide_insights_from_data(
 
     total_slides = len(rows)
     print(f"\n{'─' * 60}")
-    print(f"GENERATING META INSIGHTS — GPT brief → Kimi A → Kimi B")
-    print(f"{total_slides} slides | Brief: {_R1_MODEL} (Groq) | Writer: {_KIMI_MODEL} (Moonshot)")
+    print(f"GENERATING META INSIGHTS — brief → writer → cleanup")
+    print(f"{total_slides} slides | profiles: brief, writer, cleanup (see llm/profiles.py)")
     print(f"{'─' * 60}")
 
     meta_insights = []      # accumulates as we go — passed to R1 for variety
@@ -656,18 +543,19 @@ def generate_total_slide_subheader(
     *,
     system_prompt: str,
     user_total_prompt: str,
-    api_key: str,           # ignored
-    model: str = _LLAMA_MODEL,
+    api_key: str = "",      # ignored
+    model: str = "",        # ignored — profile picks the model
     temperature: float = 0.65,
     top_p: float = 0.85,
     max_tokens: int = 120,
     timeout: int = 60,
     **kwargs
 ) -> str:
+    """Generate a 20–25 word topline subheader for the TOTAL slide.
+
+    Uses the `total_subheader` profile — see llm/profiles.py.
     """
-    Generate a 20–25 word topline subheader for the TOTAL slide via Llama direct call.
-    """
-    groq_key   = kwargs.get("groq_api_key") or _DEFAULT_GROQ_KEY
+    groq_key   = kwargs.get("groq_api_key")  # None → provider reads env
     fact_block = _build_total_fact_block(df_tot)
 
     system = (
@@ -678,14 +566,12 @@ def generate_total_slide_subheader(
     user_msg = fact_block + "\n\n" + (user_total_prompt or "").strip()
 
     try:
-        text = _call_groq(
+        text = llm_complete(
+            "total_subheader",
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user",   "content": user_msg},
             ],
-            model=_LLAMA_MODEL,
-            temperature=temperature,
-            top_p=top_p,
             max_tokens=max_tokens,
             api_key=groq_key,
             timeout=timeout,
@@ -701,7 +587,7 @@ def generate_llm_insights_remote(
     row_prompt_template: str,
     *,
     col_map: Dict[str, str],
-    model: str = _LLAMA_MODEL,
+    model: str = "",
     api_key: str = "",
     temperature: float = 0.65,
     top_p: float = 0.90,
@@ -709,9 +595,11 @@ def generate_llm_insights_remote(
     timeout: int = 60,
     **kwargs
 ) -> pd.DataFrame:
-    """
-    Pass-through stub — per-category LLM calls are not used in direct mode.
-    Returns df with an empty 'insight' column added if missing.
+    """Pass-through stub — per-category LLM calls are not used in the direct path.
+
+    Returns df with an empty 'insight' column added if missing. Kept for
+    back-compat with main_meta_modes.py imports; remove once confirmed
+    unused.
     """
     out = df.copy()
     if "insight" not in out.columns:
@@ -724,16 +612,16 @@ def generate_meta_slide_insights(
     insights_df: pd.DataFrame,
     system_prompt: str,
     user_meta_prompt: str,
-    api_key: str,
-    model: str = _LLAMA_MODEL,
+    api_key: str = "",
+    model: str = "",
     temperature: float = 0.65,
     top_p: float = 0.90,
     max_tokens: int = 300,
     timeout: int = 60,
     **kwargs
 ) -> pd.DataFrame:
-    """
-    Pass-through stub — traditional (non-direct) mode not used with free models.
-    Returns empty DataFrame with correct schema.
-    """
+    """Pass-through stub — the traditional (synthesise-from-categories) path
+    was removed May 2026 alongside the UI mode toggle. Kept for back-compat
+    with main_meta_modes.py imports; returns empty DataFrame with the
+    correct schema."""
     return pd.DataFrame(columns=["slide_id", "meta_insight"])

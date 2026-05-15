@@ -29,16 +29,15 @@ PUBLIC ENTRY POINTS (called by pipeline.main()):
 from __future__ import annotations
 
 import json
-import os
 import re
-import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import pandas as pd
-import requests
 
 from acc_deck_pkg.yoy_transformers import excel_round
+from llm import complete as llm_complete
+from llm.errors import ProviderError
 
 
 # =============================================================================
@@ -68,8 +67,9 @@ MAX_RETRIES = _PIPE.get("max_retries", 3)
 BASE_DELAY  = _PIPE.get("base_delay",  2.0)
 WORD_LIMIT  = _PIPE.get("word_limit",  55)
 
-MOONSHOT_API_KEY = os.environ.get("MOONSHOT_API_KEY", "")
-_MOONSHOT_URL    = "https://api.moonshot.ai/v1/chat/completions"
+# Provider URL + API key are owned by src/llm/. To swap to internally-hosted
+# models edit src/llm/profiles.py — the `fs_insight` profile points at the
+# Moonshot provider today; repointing it to "internal" needs no edits here.
 
 
 # =============================================================================
@@ -229,56 +229,38 @@ def clean_insight(raw_text: str) -> str:
 
 
 # =============================================================================
-# MOONSHOT CALL — direct HTTP (kimi-k2.6 cannot use OpenAI-style params)
+# MODEL CALL — routed through src/llm/ (single seam to swap providers)
 # =============================================================================
 
 def _call_moonshot(system: str, user: str) -> str:
+    """Route a (system, user) pair through the `fs_insight` profile.
+
+    The profile lives in src/llm/profiles.py and currently points at
+    Moonshot Kimi K2.6 in thinking-disabled mode. To swap to internally-
+    hosted models, edit profiles.py — this function does not need to
+    change.
+
+    Returns "" on final failure (caller treats empty as "skip the slide");
+    the underlying provider already exhausts its own retry budget before
+    raising, so we don't retry again here.
+
+    Function name kept for back-compat with existing call sites.
     """
-    POST (system, user) to Moonshot's Kimi K2.6 endpoint via direct HTTP.
-
-    Why not the OpenAI SDK: kimi-k2.6 in thinking-disabled mode hard-locks
-    temperature=0.6 / top_p=0.95 server-side. Sending other values returns
-    HTTP 400. The OpenAI SDK doesn't make it easy to omit those params or
-    inject the required `thinking: {"type": "disabled"}` field.
-
-    Retries up to MAX_RETRIES with exponential backoff on 429 or any error.
-    Returns "" on final failure (caller treats empty as "skip the slide").
-    """
-    headers = {
-        "Authorization": f"Bearer {MOONSHOT_API_KEY}",
-        "Content-Type":  "application/json",
-    }
-    payload = {
-        "model":      GENERATION_MODEL,
-        "messages":   [
-            {"role": "system", "content": system},
-            {"role": "user",   "content": user},
-        ],
-        "thinking":   {"type": "disabled"},
-        "max_tokens": GENERATION_MAX_TOKENS,
-    }
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            resp = requests.post(_MOONSHOT_URL, headers=headers, json=payload, timeout=60)
-            if resp.status_code == 429:
-                wait = BASE_DELAY * (2 ** attempt)
-                print(f"      Moonshot 429 — waiting {wait:.0f}s before retry "
-                      f"{attempt + 1}/{MAX_RETRIES}...")
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            content = resp.json()["choices"][0]["message"].get("content", "")
-            return (content or "").strip()
-        except Exception as exc:
-            if attempt < MAX_RETRIES - 1:
-                wait = BASE_DELAY * (2 ** attempt)
-                print(f"      [{GENERATION_MODEL}] Retry {attempt + 1}/{MAX_RETRIES} after error: {exc}")
-                time.sleep(wait)
-            else:
-                print(f"      [{GENERATION_MODEL}] Failed after {MAX_RETRIES} attempts: {exc}")
-                return ""
-    return ""
+    try:
+        text = llm_complete(
+            "fs_insight",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user",   "content": user},
+            ],
+            model=GENERATION_MODEL,        # config.json override wins over profile default
+            max_tokens=GENERATION_MAX_TOKENS,
+            timeout=60,
+        )
+        return (text or "").strip()
+    except ProviderError as exc:
+        print(f"      [fs_insight] failed: {exc.__class__.__name__}: {exc}")
+        return ""
 
 
 # =============================================================================

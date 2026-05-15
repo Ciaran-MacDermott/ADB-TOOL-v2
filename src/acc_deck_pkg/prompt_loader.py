@@ -3,9 +3,92 @@ import warnings
 warnings.filterwarnings("ignore")
 from datetime import datetime
 from pathlib import Path
-from acc_deck_pkg.llm_insights_claude import (
-    append_sampled_insights_to_prompt,
-)
+from typing import List, Optional
+
+import pandas as pd
+
+
+def prepend_sampled_insights_to_prompt(
+    base_prompt: str,
+    csv_path: str,
+    sample_size: int = 5,
+    *,
+    insight_columns: Optional[List[str]] = None,
+    seed: Optional[int] = None,
+    section_title: str = "ADDITIONAL STYLE EXAMPLES",
+) -> str:
+    """Append N sampled example insights from a CSV to the END of a prompt.
+
+    Despite the legacy name, examples land at the END so they don't crowd the
+    primary task instructions. Returns base_prompt unchanged when the CSV is
+    empty / missing the expected column / yields zero usable rows.
+    """
+    base_prompt = (base_prompt or "").strip()
+
+    path = Path(csv_path).expanduser().resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"CSV not found: {path}")
+
+    df = pd.read_csv(path)
+    if df.empty:
+        return base_prompt
+
+    insight_columns = insight_columns or [
+        "Refined Insight", "refined_insight", "insight", "Insight", "meta_insight",
+    ]
+    insight_col = next((c for c in insight_columns if c in df.columns), None)
+    if insight_col is None:
+        return base_prompt
+
+    n = min(sample_size, len(df))
+    sampled = df.sample(n=n, random_state=seed) if seed is not None else df.sample(n=n)
+
+    bullets = []
+    for _, r in sampled.iterrows():
+        insight = str(r.get(insight_col, "")).strip()
+        if not insight or insight.lower() in {"nan", "none"}:
+            continue
+        bullets.append(f"• {insight}")
+    if not bullets:
+        return base_prompt
+
+    examples_block = (
+        f"\n\n=== {section_title} ===\n"
+        "Reference these approved examples for tone and structure (do not copy verbatim):\n"
+        + "\n".join(bullets)
+    )
+
+    # Idempotency: if the same section was previously appended, replace it.
+    marker = f"=== {section_title} ==="
+    if marker in base_prompt:
+        base_prompt = base_prompt.split(marker, 1)[0].strip()
+
+    return base_prompt + examples_block
+
+
+def append_sampled_insights_to_prompt(
+    base_prompt: str,
+    csv_path: str,
+    sample_size: int = 5,
+    *,
+    insight_columns: Optional[List[str]] = None,
+    score_columns: Optional[List[str]] = None,   # legacy — ignored
+    reason_columns: Optional[List[str]] = None,  # legacy — ignored
+    seed: Optional[int] = None,
+    section_title: str = "DIRECTOR-APPROVED STYLE EXAMPLES",
+    context_description: str = "Use these for style and quality. Do not copy verbatim.",
+) -> str:
+    """Legacy wrapper kept for callers — score/reason columns are ignored."""
+    return prepend_sampled_insights_to_prompt(
+        base_prompt=base_prompt,
+        csv_path=csv_path,
+        sample_size=sample_size,
+        insight_columns=insight_columns,
+        seed=seed,
+        section_title=section_title,
+    )
+
+
 # ------------------------------------------------------------------------------
 # Prompt loading
 # ------------------------------------------------------------------------------
@@ -132,8 +215,6 @@ from pathlib import Path
 
 
 def _append_examples_if_available(cfg: dict, meta_prompt: str, total_prompt: str) -> tuple:
-    from acc_deck_pkg.llm_insights_claude import append_sampled_insights_to_prompt
-
     # Check if prompt_data directory exists - skip entirely if not present
     base_dir = Path(cfg.get("_config_dir", str(Path.cwd())))
     prompt_data_dir = base_dir / "prompt_data"

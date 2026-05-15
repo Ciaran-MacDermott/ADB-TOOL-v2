@@ -6,7 +6,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-InsightMode = Literal["direct", "traditional"]
 CategoryOrder = Literal["sales_volume", "alphabetical"]
 
 
@@ -33,7 +32,6 @@ class RunRequest(BaseModel):
     quarter:         Literal["Q1", "Q2", "Q3", "Q4"]
     release_date:    str            = Field(..., description="mm/yyyy")
     category_order:  CategoryOrder  = "sales_volume"
-    insight_mode:    InsightMode    = "direct"
     level1_filter:   Optional[str]  = None
     analysis_level:  Optional[str]  = None
     npd_username:    Optional[str]  = None

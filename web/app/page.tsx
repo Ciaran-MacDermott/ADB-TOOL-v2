@@ -44,7 +44,6 @@ export default function Home() {
   const now = new Date();
   const defaultRelease = `${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
   const [releaseDate, setReleaseDate] = useState<string>(defaultRelease);
-  const [insightMode, setInsightMode] = useState<"direct" | "traditional">("direct");
   const [categoryOrder, setCategoryOrder] = useState<"sales_volume" | "alphabetical">("sales_volume");
 
   // ── Run state ──────────────────────────────────────────────────────────
@@ -117,7 +116,6 @@ export default function Home() {
         year,
         quarter,
         release_date: releaseDate,
-        insight_mode: insightMode,
         category_order: categoryOrder,
       });
       const initial = await api.getRun(token, run_id);
@@ -151,7 +149,17 @@ export default function Home() {
 
       <AppShell>
         <PageHeader
-          eyebrow="Forecast accuracy"
+          eyebrow={
+            <span className="inline-flex items-center gap-2">
+              <img
+                src="/Circana_logo.png"
+                alt="Circana"
+                className="h-4 w-auto opacity-80"
+                draggable={false}
+              />
+              <span>Forecast accuracy</span>
+            </span>
+          }
           title="Generate a deck"
           subtitle="Connect to NPD, pick the wave and industry, and produce a Circana-branded PowerPoint."
         />
@@ -317,17 +325,6 @@ export default function Home() {
                 </select>
               </Field>
 
-              <Field label="Insight mode">
-                <select
-                  className={inputCls}
-                  value={insightMode}
-                  onChange={(e) => setInsightMode(e.target.value as "direct" | "traditional")}
-                  disabled={!connected}
-                >
-                  <option value="direct">Direct (recommended)</option>
-                  <option value="traditional">Traditional</option>
-                </select>
-              </Field>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">

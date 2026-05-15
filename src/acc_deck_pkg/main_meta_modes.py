@@ -8,7 +8,7 @@ forecast vs actual performance across categories.
 
 Key Features
 ------------
-- Two meta-insight generation modes (direct/traditional)
+- Direct meta-insight generation
 - Configurable category ordering (sales volume/alphabetical)
 - External prompt management via JSON config
 - Sample insight injection for prompt engineering
@@ -21,7 +21,7 @@ Usage
 This module is designed to be called from the GUI via pipeline_runner.py:
 
     from acc_deck_pkg.main_meta_modes import main
-    main(runtime_config=cfg, category_order="sales_volume", meta_mode="direct")
+    main(runtime_config=cfg, category_order="sales_volume")
 
 The runtime_config dict must contain paths, API keys, and prompt configurations.
 See config_loader.py for the expected structure.
@@ -68,32 +68,21 @@ from acc_deck_pkg.analysis import (
     merge_analysis_tables,
 )
 from acc_deck_pkg import ppt_builder
-from acc_deck_pkg.llm_insights_claude import (
+from acc_deck_pkg.llm_insights_free import (
     generate_llm_insights_remote,
     generate_meta_slide_insights,
     generate_meta_slide_insights_from_data,
     generate_total_slide_subheader,
 )
-# Free-model alternatives — loaded lazily inside main() based on cfg["llm_provider"]
-_FREE_LLM_FNS = None  # populated on first use
 
 
 def _get_llm_fns(cfg: dict):
-    """Return (generate_meta_from_data, generate_total, generate_remote, generate_meta)
-    for the provider declared in cfg. Defaults to Claude."""
-    provider = cfg.get("llm_provider", "claude")
-    if provider == "free":
-        global _FREE_LLM_FNS
-        if _FREE_LLM_FNS is None:
-            from acc_deck_pkg import llm_insights_free as _free
-            _FREE_LLM_FNS = (
-                _free.generate_meta_slide_insights_from_data,
-                _free.generate_total_slide_subheader,
-                _free.generate_llm_insights_remote,
-                _free.generate_meta_slide_insights,
-            )
-        return _FREE_LLM_FNS
-    # Default: Claude
+    """Return the four LLM-callable functions used by the pipeline.
+
+    Tuple order is fixed: (meta_from_data, total_subheader, remote_insights,
+    meta_insights). cfg is accepted for forward-compatibility — when the
+    receiving team swaps the provider via src/llm/, no callers need to change.
+    """
     return (
         generate_meta_slide_insights_from_data,
         generate_total_slide_subheader,
@@ -195,7 +184,6 @@ def _load_sampled_examples(cfg: dict, sample_type: str = "meta", max_samples: in
 
 def main(
         category_order: str = "sales_volume",
-        meta_mode: str = "direct",
         runtime_config: Optional[dict] = None,
         cancel_check: Optional[Callable[[], bool]] = None,
         df=None,
@@ -213,14 +201,11 @@ def main(
         How to order categories in the deck:
         - 'sales_volume': Largest sales first (recommended)
         - 'alphabetical': A-Z ordering
-    meta_mode : str, default "direct"
-        How to generate meta-insights:
-        - 'direct': Generate directly from category data (faster, recommended)
-        - 'traditional': Generate category insights first, then synthesize
     runtime_config : dict, required
         Configuration dict from GUI containing:
         - paths: Input file paths (actual, forecast)
-        - api_key: Anthropic API key
+        - api_key: legacy slot (ignored — providers resolve their own keys
+          via src/llm/providers/, with kwargs overrides for groq/moonshot)
         - prompts: Prompt file paths
         - deck_path: Output PowerPoint path
         - out_xlsx: Output Excel path
@@ -281,24 +266,25 @@ def main(
     out_xlsx = cfg["out_xlsx"]
     api_key = cfg["api_key"]
 
-    # Resolve LLM functions based on provider (free / claude)
+    # Resolve LLM functions. After the May 2026 cleanup there is only one
+    # provider path (free-tier via src/llm/) — _get_llm_fns is kept as a
+    # seam so a future swap to internally-hosted models doesn't ripple
+    # through call sites.
     (
         _fn_meta_from_data,
         _fn_total_subheader,
-        _fn_remote_insights,
-        _fn_meta_insights,
+        _fn_remote_insights,    # unused since traditional mode was dropped
+        _fn_meta_insights,      # unused since traditional mode was dropped
     ) = _get_llm_fns(cfg)
-    # Inject free-LLM API keys into every call via kwargs when provider == "free"
-    if cfg.get("llm_provider") == "free":
-        _free_cfg = cfg.get("free_llm", {})
-        _free_llm_kwargs = {
-            **_free_cfg,
-            "groq_api_key":       cfg.get("groq_api_key") or os.getenv(_free_cfg.get("groq_api_key_env", "GROQ_API_KEY"), ""),
-            "openrouter_api_key": os.getenv(_free_cfg.get("openrouter_api_key_env", "OPENROUTER_API_KEY"), ""),
-            "moonshot_api_key":   cfg.get("moonshot_api_key") or os.getenv(_free_cfg.get("moonshot_api_key_env", "MOONSHOT_API_KEY"), ""),
-        }
-    else:
-        _free_llm_kwargs = {}
+
+    # Per-call API key overrides forwarded into every LLM function via
+    # **kwargs. None / missing keys → providers fall back to env vars
+    # (GROQ_API_KEY, MOONSHOT_API_KEY).
+    _free_cfg = cfg.get("free_llm", {})
+    _free_llm_kwargs = {
+        "groq_api_key":     cfg.get("groq_api_key")     or os.getenv(_free_cfg.get("groq_api_key_env",     "GROQ_API_KEY"), "")     or None,
+        "moonshot_api_key": cfg.get("moonshot_api_key") or os.getenv(_free_cfg.get("moonshot_api_key_env", "MOONSHOT_API_KEY"), "") or None,
+    }
 
     # Load prompts from external files
     system_prompt, meta_prompt, total_prompt, row_prompt = _load_prompts_from_config(cfg)
@@ -327,9 +313,8 @@ def main(
     refine_params = model_params.get("grammar_refine", {})
 
     # Display configuration (condensed)
-    _provider = cfg.get("llm_provider", "claude")
-    _model_label = "R1 + Kimi K2" if _provider == "free" else model_meta.split('-')[1]
-    print(f"-- Pipeline: {meta_mode} | {category_order} | {_model_label} --")
+    _model_label = "GPT-OSS-120B (Groq) + Kimi K2.6 (Moonshot)"
+    print(f"-- Pipeline: {category_order} | {_model_label} --")
 
     # === STAGE 1: SETUP ===
     print("\n[1/5] Setting up presentation...")
@@ -498,76 +483,29 @@ def main(
     insights_df = collapsed
 
     try:
-        if meta_mode == "direct":
-            sampling_cfg = cfg.get("prompt_sampling", {})
-            max_samples = sampling_cfg.get("max_samples_meta", 5)
-            sampled_examples = _load_sampled_examples(cfg, sample_type="meta", max_samples=max_samples)
+        sampling_cfg = cfg.get("prompt_sampling", {})
+        max_samples = sampling_cfg.get("max_samples_meta", 5)
+        sampled_examples = _load_sampled_examples(cfg, sample_type="meta", max_samples=max_samples)
 
-            # Load narrative analysis config
-            narrative_config = cfg.get("narrative_analysis", {})
+        # Load narrative analysis config
+        narrative_config = cfg.get("narrative_analysis", {})
 
-            meta_df = _fn_meta_from_data(
-                slide_mapping=filtered_slide_cats,
-                collapsed_df=collapsed,
-                system_prompt=system_prompt,
-                user_meta_prompt=meta_prompt,
-                api_key=api_key,
-                model=model_meta,
-                timeout=timeout,
-                temperature=meta_params.get("temperature", 0.8),
-                top_p=meta_params.get("top_p", 0.79),
-                max_tokens=meta_params.get("max_tokens", 300),
-                sampled_examples=sampled_examples,
-                narrative_config=narrative_config,
-                **_free_llm_kwargs,
-            )
-            insights_df = collapsed
-
-        else:
-            print(f"\nGenerating individual category insights (using {model_category.split('-')[1]})...")
-            insights_df = _fn_remote_insights(
-                df=collapsed,
-                system_prompt=system_prompt,
-                row_prompt_template=row_prompt,
-                col_map=cfg["llm_column_aliases"],
-                api_key=api_key,
-                model=model_category,
-                timeout=timeout,
-                temperature=cat_params.get("temperature", 0.71),
-                top_p=cat_params.get("top_p", 0.85),
-                max_tokens=cat_params.get("max_tokens", 300),
-                **_free_llm_kwargs,
-            )
-
-            # Grammar cleaning for category insights (uses Opus, preserves full detail)
-            print(f"\nCleaning category insight grammar (using {model_refine.split('-')[1]})...")
-            insights_df = refine_category_insights_df(
-                insights_df,
-                api_key=api_key,
-                model=model_refine,
-                timeout=timeout,
-                temperature=refine_params.get("temperature", 0.3),
-                top_p=refine_params.get("top_p", 0.92),
-                max_tokens=refine_params.get("max_tokens", 200),
-                verbose=True,
-            )
-
-            check_cancelled()  # Check between LLM calls
-
-            print(f"\nSynthesizing meta-insights (using {_model_label})...")
-            meta_df = _fn_meta_insights(
-                slide_mapping=filtered_slide_cats,
-                insights_df=insights_df,
-                system_prompt=system_prompt,
-                user_meta_prompt=meta_prompt,
-                api_key=api_key,
-                model=model_meta,
-                timeout=timeout,
-                temperature=meta_params.get("temperature", 0.8),
-                top_p=meta_params.get("top_p", 0.89),
-                max_tokens=meta_params.get("max_tokens", 300),
-                **_free_llm_kwargs,
-            )
+        meta_df = _fn_meta_from_data(
+            slide_mapping=filtered_slide_cats,
+            collapsed_df=collapsed,
+            system_prompt=system_prompt,
+            user_meta_prompt=meta_prompt,
+            api_key=api_key,
+            model=model_meta,
+            timeout=timeout,
+            temperature=meta_params.get("temperature", 0.8),
+            top_p=meta_params.get("top_p", 0.79),
+            max_tokens=meta_params.get("max_tokens", 300),
+            sampled_examples=sampled_examples,
+            narrative_config=narrative_config,
+            **_free_llm_kwargs,
+        )
+        insights_df = collapsed
 
     except CancellationError:
         raise  # Re-raise cancellation errors

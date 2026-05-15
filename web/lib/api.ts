@@ -22,7 +22,6 @@ export type RunRequest = {
   quarter: "Q1" | "Q2" | "Q3" | "Q4";
   release_date: string;
   category_order?: "sales_volume" | "alphabetical";
-  insight_mode?: "direct" | "traditional";
   level1_filter?: string;
   analysis_level?: string;
   npd_username?: string;
