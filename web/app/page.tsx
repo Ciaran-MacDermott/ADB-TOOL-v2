@@ -21,6 +21,11 @@ import { api, type Industry, type Levels, type RunStatus } from "@/lib/api";
 const QUARTERS = ["Q1", "Q2", "Q3", "Q4"] as const;
 const YEARS = Array.from({ length: 8 }, (_, i) => 2024 + i);
 
+// Idle-logout: closes the same-tab hijack window (User A leaves a tab
+// open, User B walks up to the same tab). Pauses while a run is in
+// flight so a 10-min deck build doesn't get killed by silence.
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+
 // ── Persistence model ─────────────────────────────────────────────────
 // sessionStorage -> {token, username}  scoped to THIS browser window.
 //                                       New tab/window = Connect form.
@@ -187,6 +192,38 @@ export default function Home() {
   useEffect(() => {
     setRunIdInUrl(run?.run_id ?? null);
   }, [run?.run_id]);
+
+  // Idle auto-logout. Resets on any user activity; suspends while a run
+  // is queued or running so a 10-min deck build isn't killed by silence.
+  // Decoupled from onDisconnect so we can leave a "Signed out after
+  // idle" notice on the Connect form when it fires.
+  useEffect(() => {
+    if (!token) return;
+    if (run?.state === "queued" || run?.state === "running") return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const reset = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (token) api.disconnect(token).catch(() => undefined);
+        clearStash();
+        setRunIdInUrl(null);
+        setToken(null);
+        setRun(null);
+        setRunError(null);
+        setConnectError(`Signed out after ${IDLE_TIMEOUT_MS / 60_000} minutes of inactivity.`);
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    const events = ["mousedown", "keydown", "scroll", "touchstart"] as const;
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [token, run?.state]);
 
   // Load industries once we have a token.
   useEffect(() => {
