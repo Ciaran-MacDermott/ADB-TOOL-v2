@@ -95,19 +95,29 @@ _API_PATH_FORECAST   = os.getenv("NPD_API_PATH_FORECAST",   "/api/ext/industry/{
 
 def _writable_base() -> Path:
     """
-    Return a writable base directory that works both in dev and when frozen
-    by PyInstaller.
+    Return a writable base directory that works in dev, when frozen by
+    PyInstaller, and inside a walled-garden container.
 
-    - Frozen (.exe):  directory containing the executable
-    - Dev (source):   ADB project root (one level above acc_deck_pkg/)
+    - NPD_COOKIES_DIR env var:  used as-is when set (container deploy)
+    - Frozen (.exe):            directory containing the executable
+    - Dev (source):             package root (one level above acc_deck_pkg/)
     """
+    env_dir = os.getenv("NPD_COOKIES_DIR", "")
+    if env_dir:
+        return Path(env_dir)
     if getattr(sys, 'frozen', False):
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
 
 def _cookie_path(env_key: str) -> Path:
-    path = _writable_base() / "Cookies" / f"npd_cookies_{env_key}.pkl"
+    base = _writable_base()
+    # When NPD_COOKIES_DIR is set the env var IS the cookies dir.
+    # Otherwise nest under ./Cookies/ as the legacy layout expects.
+    if os.getenv("NPD_COOKIES_DIR"):
+        path = base / f"npd_cookies_{env_key}.pkl"
+    else:
+        path = base / "Cookies" / f"npd_cookies_{env_key}.pkl"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 

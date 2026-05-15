@@ -39,7 +39,7 @@ npm install
 npm run dev          # Next on :3002
 ```
 
-The frontend hits `http://localhost:8002` in dev (CORS-allowed by `api/main.py`).
+The frontend hits the URL in `NEXT_PUBLIC_API_BASE` (set to `http://localhost:8002` for dev); CORS is opened to `ADB_CORS_ORIGINS` (set to `http://localhost:3002` for dev). Both env vars default to empty so production single-port deploy is same-origin with no CORS surface.
 
 Ports 3002 / 8002 are chosen to avoid clashing with other local Next + FastAPI projects that run on the defaults 3000 / 8000.
 
@@ -115,12 +115,31 @@ Up to **3 deck builds** can run at the same time — plenty for a small internal
 
 Implementation lives in `api/runs.py`: a `BoundedSemaphore` for the slot cap, per-record locks for clean status snapshots, and a 1-hour idle-TTL reaper that cleans up abandoned runs.
 
-## Migrating from v1
+## How a run flows end-to-end
 
-The legacy Streamlit packages (`acc_deck_pkg`, `acc_deck_fs_pkg`) live under `src/`. The FastAPI `POST /api/runs` handler in `api/main.py` is the wiring point — it currently transitions through states without invoking the pipeline. To wire it:
+`POST /api/connect` runs Selenium SSO against prod + qa in parallel (cached cookies short-circuit when fresh), pulls the industry list from `/api/ext/industries`, and stashes both `requests.Session` objects + the industries on an in-memory `Session` keyed by an opaque token. `GET /api/industries` returns that list filtered to supported markets and tagged `pipeline: "adb" | "fs"`. `GET /api/industries/{slug}/levels` does a single forecast fetch to derive level1 filter values + level columns for the ADB pipeline (foodservice skips this).
 
-1. Import the relevant pipeline module (`src.acc_deck_pkg.pipeline` or `src.acc_deck_fs_pkg.pipeline`) inside the `_worker` function — call it **between** `set_state(run, state="running")` and `set_state(run, state="done")`, inside the `with RUN_SLOTS:` block. Keeping the call there means the slot cap and ETA tracking apply automatically.
-2. Adapt the function signature to accept the `RunRequest` payload from `api/schemas.py`.
-3. Have the pipeline write its PPTX to a temp path and stash it on `Run.artifact` so `GET /api/runs/{id}/download` can serve it.
+`POST /api/runs` returns a `run_id` immediately and spawns a worker thread that acquires one of `RUN_SLOTS` (default 3) and dispatches to `acc_deck_pkg.main_meta_modes.main(...)` or `acc_deck_fs_pkg.pipeline.run_full_pipeline(...)` based on the industry's pipeline tag. The worker installs a per-thread stdout tee so every `print()` from inside the pipeline (Selenium login lines, NPD HTTP responses, GPT-brief / Kimi-write banners, per-category insights) appends to `Run.logs`. The frontend polls `GET /api/runs/{id}` every 1s — the response includes the last 200 log lines, current step, queue position+ETA when queued, and elapsed time. When state turns `done`, `GET /api/runs/{id}/download` serves the `.pptx` and (for ADB) `/download/xlsx` serves the insights workbook. `POST /api/runs/{id}/cancel` sets a `threading.Event` the pipeline checks at safe points.
 
-See `streamlit_app.py` in the v1 repo for the original input → pipeline → download wiring.
+The frontend stashes `{session_token, run_id}` in `localStorage` with a 20-min TTL so an accidental refresh during a 10–15 min run rehydrates the in-flight status instead of forcing a re-login. Disconnect / download / TTL-expiry all clear the stash.
+
+## Walled-garden deploy
+
+The image is self-contained — `docker build` once, ship the resulting artifact into the walled garden, run with env injection. The runtime knobs:
+
+| Env var | Purpose | Default |
+|---|---|---|
+| `NPD_PROD_URL`, `NPD_QA_URL` | NPD External API base URLs | (must set) |
+| `NPD_API_PATH_INDUSTRIES`, `NPD_API_PATH_FORECAST` | Endpoint suffixes | sensible literals — leave alone |
+| `GROQ_API_KEY`, `MOONSHOT_API_KEY` | LLM providers (until the internal-LLM stub is wired) | (must set) |
+| `CHROME_BIN`, `CHROMEDRIVER_PATH` | Chromium + chromedriver paths inside the container | set by Dockerfile |
+| `NPD_COOKIES_DIR` | Where the Selenium 50-min cookie pickle is cached. Must be writable by the container user | `/app/Cookies` (Dockerfile) |
+| `ADB_MAX_RUN_SLOTS` | Concurrent-deck cap (BoundedSemaphore) | `3` |
+| `ADB_CORS_ORIGINS` | Comma-separated CORS allow-list. Empty in prod (same-origin); set to `http://localhost:3002` in dev | empty |
+| `NEXT_PUBLIC_API_BASE` | Frontend API base. Empty in prod (relative URLs, same-origin); `http://localhost:8002` in dev | empty (build-time) |
+
+The Dockerfile starts uvicorn with `--proxy-headers --forwarded-allow-ips=*` so the cluster's TLS-terminating reverse proxy can pass `X-Forwarded-*` headers (scheme/host) for correct URL generation. Restrict the allowed IPs from `*` to the proxy's CIDR in stricter environments.
+
+**Single replica** — sessions and the run registry live in-process. If the deployment scales to multiple replicas behind a load balancer, sessions break (a poll might hit a replica that didn't kick off the run). Swap `api/sessions.py` and `api/runs.py` to a Redis-backed store before scaling out.
+
+**Run artifacts** — pipelines write `.pptx` / `.xlsx` to `tempfile.mkdtemp(prefix="adb_output_")` under `/tmp`. The 60-min idle TTL on `Run` clears the in-memory record but leaves the temp dir on disk. For long-running pods either mount `/tmp` as an `emptyDir` with a size limit, or extend `api/runs.py`'s reaper to `shutil.rmtree(run.artifact.parent)` on eviction.

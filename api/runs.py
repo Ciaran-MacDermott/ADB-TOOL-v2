@@ -29,6 +29,7 @@ user closed gets cleaned up.
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import time
 import uuid
@@ -39,6 +40,10 @@ from typing import Any, Dict, Literal, Optional
 
 
 State = Literal["queued", "running", "done", "error", "cancelled"]
+
+# Hard cap on per-run log lines kept in memory. Beyond this we drop the
+# oldest lines so a chatty pipeline can't blow up RAM.
+LOG_BUFFER_MAX = 1000
 
 
 MAX_RUN_SLOTS = max(1, int(os.environ.get("ADB_MAX_RUN_SLOTS", "3")))
@@ -85,8 +90,10 @@ class Run:
     # (``registry.get``). Eviction is keyed on this.
     last_touched: float = field(default_factory=time.time)
     artifact:     Optional[Path] = None
+    artifact_xlsx: Optional[Path] = None
     cancel_event: threading.Event = field(default_factory=threading.Event)
     lock:         threading.Lock = field(default_factory=threading.Lock)
+    logs:         list[str]      = field(default_factory=list)
 
     @property
     def elapsed_s(self) -> float:
@@ -193,7 +200,7 @@ def _compute_queue_info(run: Run) -> tuple[Optional[int], Optional[int], Optiona
     return position, depth, eta_seconds
 
 
-def snapshot(run: Run) -> dict[str, Any]:
+def snapshot(run: Run, *, max_log_lines: int = 200) -> dict[str, Any]:
     """Read a consistent status snapshot for the HTTP layer."""
     queue_position, queue_depth, eta_seconds = _compute_queue_info(run)
     with run.lock:
@@ -206,7 +213,93 @@ def snapshot(run: Run) -> dict[str, Any]:
             "queue_position": queue_position,
             "queue_depth":    queue_depth,
             "eta_seconds":    eta_seconds,
+            "logs":           list(run.logs[-max_log_lines:]),
         }
+
+
+# ── Live log capture ──────────────────────────────────────────────────
+# Pipelines log progress via plain ``print()`` calls. We want those lines
+# surfaced to the frontend without rewriting the pipeline. The pattern:
+#
+#   1. Replace ``sys.stdout`` once at startup with ``_StdoutTee`` — a thin
+#      wrapper that writes through to the original stdout AND, if a Run
+#      is registered for the calling thread, appends to ``run.logs``.
+#   2. Each worker calls ``set_run_for_thread(run)`` before invoking the
+#      pipeline and ``clear_run_for_thread()`` on exit.
+#   3. Threads with no registered run (e.g. uvicorn workers, FastAPI
+#      handlers) just see normal stdout behaviour.
+#
+# Two concurrent workers can write to two different run buffers because
+# the routing target lives in ``threading.local()``.
+
+_thread_local = threading.local()
+
+
+def append_log(run: Run, line: str) -> None:
+    with run.lock:
+        run.logs.append(line)
+        if len(run.logs) > LOG_BUFFER_MAX:
+            del run.logs[: len(run.logs) - LOG_BUFFER_MAX]
+        run.last_touched = time.time()
+
+
+def set_run_for_thread(run: Run) -> None:
+    _thread_local.run = run
+
+
+def clear_run_for_thread() -> None:
+    _thread_local.run = None
+
+
+class _StdoutTee:
+    """Tee stdout writes through to the original stream and (if any) the
+    Run registered on the current thread. Thread-safe by virtue of using
+    threading.local for routing."""
+
+    def __init__(self, original):
+        self._original = original
+
+    def write(self, text: str):
+        try:
+            self._original.write(text)
+        except Exception:
+            pass
+        run = getattr(_thread_local, "run", None)
+        if run is None or not text:
+            return
+        # Split on newlines so each log line is one entry. Drop empties.
+        for line in text.rstrip("\n").split("\n"):
+            if line.strip():
+                append_log(run, line)
+
+    def flush(self):
+        try:
+            self._original.flush()
+        except Exception:
+            pass
+
+    # Some libraries (e.g. tqdm) probe for these:
+    def isatty(self) -> bool:
+        return False
+
+    def fileno(self):
+        return self._original.fileno()
+
+
+_TEE_INSTALLED = False
+_TEE_LOCK = threading.Lock()
+
+
+def install_stdout_tee() -> None:
+    """Install the tee on sys.stdout. Idempotent and safe to call
+    multiple times (e.g. uvicorn's --reload re-imports the module)."""
+    global _TEE_INSTALLED
+    with _TEE_LOCK:
+        if _TEE_INSTALLED:
+            return
+        if not isinstance(sys.stdout, _StdoutTee):
+            sys.stdout = _StdoutTee(sys.stdout)
+        _TEE_INSTALLED = True
 
 
 def _reap_loop() -> None:

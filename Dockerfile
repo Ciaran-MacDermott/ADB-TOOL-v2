@@ -61,6 +61,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV CHROME_BIN=/usr/bin/chromium
 ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
+# Cookies cache dir — Selenium pickles the 50-min session cookie here so
+# subsequent /api/connect calls skip the full SSO flow. Must be writable
+# by the container user. Pointed to the dir created + chowned below.
+ENV NPD_COOKIES_DIR=/app/Cookies
 
 WORKDIR /app
 
@@ -81,4 +85,10 @@ USER user
 
 EXPOSE 8002
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8002"]
+# --proxy-headers + --forwarded-allow-ips lets uvicorn trust the cluster
+# reverse proxy (which terminates TLS) for X-Forwarded-* so the FastAPI
+# request.url reflects the public scheme/host. Restrict to internal
+# proxy IPs in stricter environments by replacing "*" with that CIDR.
+CMD ["uvicorn", "api.main:app", \
+     "--host", "0.0.0.0", "--port", "8002", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]
