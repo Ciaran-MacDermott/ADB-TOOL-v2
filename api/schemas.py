@@ -40,10 +40,14 @@ class RunRequest(BaseModel):
 
 class RunStatus(BaseModel):
     run_id:    str
-    state:     Literal["pending", "running", "done", "error", "cancelled"]
+    state:     Literal["queued", "running", "done", "error", "cancelled"]
     step:      Optional[str] = None
     message:   Optional[str] = None
     elapsed_s: float = 0.0
+    # Populated only while state == "queued"; null once the run has a slot.
+    queue_position: Optional[int]   = None
+    queue_depth:    Optional[int]   = None
+    eta_seconds:    Optional[float] = None
 
 
 class RunResponse(BaseModel):

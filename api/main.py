@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
@@ -136,7 +137,13 @@ def list_industries(x_session_token: str | None = Header(default=None)):
 def start_run(req: RunRequest, x_session_token: str | None = Header(default=None)):
     """Kick off a deck build. Returns immediately with a run_id; the client
     polls /api/runs/{id} for progress and downloads via /api/runs/{id}/download
-    once state == 'done'."""
+    once state == 'done'.
+
+    The worker acquires one of ``RUN_SLOTS`` before flipping state to
+    'running'; if all slots are taken the run sits at state='queued'
+    until a slot frees up. Queue position + ETA are surfaced through
+    the status snapshot.
+    """
     sess = _require_session(x_session_token)
 
     industry = next((i for i in INDUSTRIES if i.slug == req.industry), None)
@@ -146,15 +153,19 @@ def start_run(req: RunRequest, x_session_token: str | None = Header(default=None
     run = run_registry.new_run()
 
     def _worker():
-        # TODO: wire to src/acc_deck_pkg.pipeline or src/acc_deck_fs_pkg.pipeline
-        # depending on industry.pipeline. For scaffold purposes we just
-        # transition through the states.
-        try:
-            run_registry.update(run.run_id, state="running", step="extracting")
-            # ... actual pipeline call goes here ...
-            run_registry.update(run.run_id, state="done", step="finished")
-        except Exception as exc:  # pragma: no cover — placeholder
-            run_registry.update(run.run_id, state="error", message=str(exc))
+        with run_registry.RUN_SLOTS:
+            run_registry.set_state(run, state="running", step="extracting")
+            t0 = time.time()
+            try:
+                # TODO: wire to src/acc_deck_pkg.pipeline or
+                # src/acc_deck_fs_pkg.pipeline depending on
+                # industry.pipeline. For scaffold purposes we just
+                # transition through the states.
+                # ... actual pipeline call goes here ...
+                run_registry.set_state(run, state="done", step="finished")
+                run_registry.record_run_duration(time.time() - t0)
+            except Exception as exc:  # pragma: no cover — placeholder
+                run_registry.set_state(run, state="error", message=str(exc))
 
     threading.Thread(target=_worker, daemon=True).start()
     return RunResponse(run_id=run.run_id)
@@ -165,13 +176,7 @@ def get_run(run_id: str):
     run = run_registry.get(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
-    return RunStatus(
-        run_id=run.run_id,
-        state=run.state,
-        step=run.step or None,
-        message=run.message or None,
-        elapsed_s=run.elapsed_s,
-    )
+    return RunStatus(**run_registry.snapshot(run))
 
 
 @app.get("/api/runs/{run_id}/download")

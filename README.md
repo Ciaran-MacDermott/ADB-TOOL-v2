@@ -109,11 +109,28 @@ If `src/llm/providers/internal_stub.py` is later wired to an internal LLM endpoi
 
 **Templates are committed as regular binaries**, not LFS — both `src/acc_deck_fs_pkg/Templates/template.pptx` and `pipeline_config/pipeline_config/template.pptx` ship as real `.pptx` blobs in the git tree. CI without `git-lfs` access can clone and build without setup. If you ever re-add LFS tracking, restore those two files as regular blobs before pushing or the pipeline will fail at deck-generation time.
 
+## Concurrent users
+
+The server is built to handle a small team hitting it at the same time without falling over. Each deck build runs in its own worker thread, but only `MAX_RUN_SLOTS` (default **3**, override via `ADB_MAX_RUN_SLOTS`) can be in flight at once — anything beyond that sits in `state="queued"` until a slot opens.
+
+Queued users see useful feedback rather than a frozen spinner:
+
+- `queue_position` and `queue_depth` — "Position 2 of 4".
+- `eta_seconds` — projected from a rolling median of the last ~20 successful runs (only shown once all slots are full).
+
+Other concurrency hygiene built into `api/runs.py`:
+
+- **Per-record locks** so concurrent pollers never see torn state from the worker thread.
+- **Idle-TTL eviction** (1 hour) — abandoned runs get reaped so memory doesn't grow unbounded. A daemon thread sweeps every minute.
+- **Touch-on-read** — any API poll or worker progress refreshes the run's last-touched timestamp, so an actively-watched deck never gets evicted mid-build.
+
+The default cap of 3 is sized for a 2-vCPU HF Space (Chromium-for-NPD-SSO is the dominant resource per run). Bump it on a beefier host.
+
 ## Migrating from v1
 
 The legacy Streamlit packages (`acc_deck_pkg`, `acc_deck_fs_pkg`) live under `src/`. The FastAPI `POST /api/runs` handler in `api/main.py` is the wiring point — it currently transitions through states without invoking the pipeline. To wire it:
 
-1. Import the relevant pipeline module (`src.acc_deck_pkg.pipeline` or `src.acc_deck_fs_pkg.pipeline`) inside the worker thread.
+1. Import the relevant pipeline module (`src.acc_deck_pkg.pipeline` or `src.acc_deck_fs_pkg.pipeline`) inside the `_worker` function — call it **between** `set_state(run, state="running")` and `set_state(run, state="done")`, inside the `with RUN_SLOTS:` block. Keeping the call there means the slot cap and ETA tracking apply automatically.
 2. Adapt the function signature to accept the `RunRequest` payload from `api/schemas.py`.
 3. Have the pipeline write its PPTX to a temp path and stash it on `Run.artifact` so `GET /api/runs/{id}/download` can serve it.
 

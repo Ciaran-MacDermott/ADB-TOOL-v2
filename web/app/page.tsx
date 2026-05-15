@@ -21,12 +21,18 @@ const QUARTERS = ["Q1", "Q2", "Q3", "Q4"] as const;
 const YEARS = Array.from({ length: 8 }, (_, i) => 2024 + i);
 
 const STATE_TONE: Record<RunStatus["state"], "info" | "success" | "warning" | "error" | "neutral"> = {
-  pending:   "neutral",
+  queued:    "neutral",
   running:   "info",
   done:      "success",
   error:     "error",
   cancelled: "warning",
 };
+
+function formatEta(seconds: number): string {
+  if (seconds < 90) return `~${Math.max(1, Math.round(seconds))}s`;
+  const mins = Math.round(seconds / 60);
+  return `~${mins} min`;
+}
 
 export default function Home() {
   // ── Connect state ──────────────────────────────────────────────────────
@@ -233,6 +239,19 @@ export default function Home() {
             ) : (
               <div className="space-y-2 text-sm">
                 <Row label="Run ID"  value={<code className="text-xs">{run.run_id}</code>} />
+                {run.state === "queued" && run.queue_position != null && run.queue_depth != null && (
+                  <Row
+                    label="Queue"
+                    value={
+                      <span>
+                        Position {run.queue_position + 1} of {run.queue_depth}
+                        {run.eta_seconds != null && (
+                          <span className="text-zinc-500"> · ETA {formatEta(run.eta_seconds)}</span>
+                        )}
+                      </span>
+                    }
+                  />
+                )}
                 <Row label="Step"    value={run.step ?? "—"} />
                 <Row label="Elapsed" value={`${run.elapsed_s.toFixed(1)}s`} />
                 {run.message && <Row label="Message" value={run.message} />}
@@ -330,7 +349,7 @@ export default function Home() {
             <div className="mt-6 flex justify-end gap-2">
               <Button
                 variant="primary"
-                disabled={!connected || submitting || !industry || run?.state === "running"}
+                disabled={!connected || submitting || !industry || run?.state === "queued" || run?.state === "running"}
                 onClick={onRun}
               >
                 {submitting ? "Starting…" : "Run pipeline"}

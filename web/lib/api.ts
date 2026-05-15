@@ -30,10 +30,13 @@ export type RunRequest = {
 
 export type RunStatus = {
   run_id: string;
-  state: "pending" | "running" | "done" | "error" | "cancelled";
+  state: "queued" | "running" | "done" | "error" | "cancelled";
   step?: string | null;
   message?: string | null;
   elapsed_s: number;
+  queue_position?: number | null;
+  queue_depth?: number | null;
+  eta_seconds?: number | null;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────
