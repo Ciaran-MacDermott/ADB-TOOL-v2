@@ -9,6 +9,23 @@ Mirrors the data_ingester / AIC shape:
 The deck-building engine lives in src/acc_deck_pkg and src/acc_deck_fs_pkg
 (ported from the original Streamlit app). This BFF provides a thin REST
 surface over it: kick off runs, poll status, download the PPTX.
+
+──────────────────────────────────────────────────────────────────────────
+NETWORK POLICY
+──────────────────────────────────────────────────────────────────────────
+Ingress (inbound to this process):
+  :8000 (HTTP) — /api/* JSON + the static frontend mounted at /. Sits
+                 behind a TLS-terminating reverse proxy in production.
+  :3000 (HTTP) — only in dev (Next.js dev server with CORS allow).
+
+Egress (outbound — must be on the walled-garden allowlist):
+  - LLM providers: see src/llm/providers/__init__.py for the current
+    URLs (api.groq.com, api.moonshot.ai). Once the internal endpoint in
+    src/llm/providers/internal_stub.py is wired, these can be removed
+    from the allowlist.
+  - NPD External API:
+      * future-of.npd.com:443     (prod)   — overridable via NPD_PROD_URL
+      * future-of-qa.npd.com:443  (QA)     — overridable via NPD_QA_URL
 """
 
 from __future__ import annotations

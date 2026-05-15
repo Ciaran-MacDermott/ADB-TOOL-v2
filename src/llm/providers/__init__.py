@@ -5,6 +5,21 @@ short name. `get_provider(name)` is the public accessor used by
 `llm.complete()`; profiles map their `provider` field to one of these.
 
 Adding a new provider: import its class, instantiate, register here.
+
+──────────────────────────────────────────────────────────────────────────
+THIS FILE IS THE EGRESS ALLOWLIST
+──────────────────────────────────────────────────────────────────────────
+Every URL the LLM layer can reach is declared below as a `base_url=`
+on a provider instance. Read this file to draft the firewall rules:
+
+  groq        api.groq.com:443         (HTTPS)
+  openrouter  openrouter.ai:443        (HTTPS)
+  moonshot    api.moonshot.ai:443      (HTTPS)
+  internal    <not yet wired>          edit providers/internal_stub.py
+
+Removing a provider here removes its possible egress entirely. To force
+an air-gapped deployment, leave only `internal` in the registry and
+ensure every profile in profiles.py routes to it.
 """
 
 from __future__ import annotations

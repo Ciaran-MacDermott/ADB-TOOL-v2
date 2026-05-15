@@ -17,6 +17,19 @@ Endpoints:
 
 Production:  https://future-of.npd.com/data-navigator/future-of-admin
 QA:          https://future-of-qa.npd.com/data-navigator/future-of-admin
+
+──────────────────────────────────────────────────────────────────────────
+NETWORK POLICY — egress (foodservice pipeline)
+──────────────────────────────────────────────────────────────────────────
+Same hosts as acc_deck_pkg.api_extractor:
+  - future-of.npd.com:443       (prod, default)  — env: NPD_PROD_URL
+  - future-of-qa.npd.com:443    (QA,   default)  — env: NPD_QA_URL
+
+Note: src/acc_deck_fs_pkg/Templates/template.pptx is currently a Git LFS
+pointer (~131 bytes). The pipeline cannot generate decks without the
+real binary. Either install git-lfs and pull, or commit the binary
+directly out of LFS, before deploying into a walled-garden CI that
+lacks LFS access.
 """
 
 import os

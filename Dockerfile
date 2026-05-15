@@ -4,13 +4,50 @@
 # Two-stage build: Node compiles the Next.js frontend to web/out/, then
 # the Python image copies it in alongside the FastAPI BFF and serves the
 # whole app on port 8000.
+#
+# ─── Walled-garden deployment model ────────────────────────────────────
+# Build happens on a DMZ host with normal egress; the resulting image is
+# pushed into the walled garden where only the runtime egress endpoints
+# below are reachable.
+#
+# Build-time egress (DMZ host only):
+#   - registry-1.docker.io           pulling node:20-bookworm-slim and python:3.12-slim
+#   - deb.debian.org / security.*    apt-get for chromium + chromium-driver + curl
+#   - registry.npmjs.org             npm ci  (Next.js, React, Tailwind, etc.)
+#   - pypi.org / files.pythonhosted  pip install -r requirements.txt
+#   - fonts.googleapis.com / gstatic next/font/google downloads Inter at build time
+#                                    and inlines it under web/out/_next/static/media/
+#                                    so the running container makes ZERO calls to
+#                                    Google Fonts.
+#
+# Runtime egress (walled-garden container — must be whitelisted):
+#   - api.groq.com:443      (HTTPS) — LLM provider for brief / fast_writer /
+#                                     total_subheader profiles. See
+#                                     src/llm/providers/__init__.py.
+#   - api.moonshot.ai:443   (HTTPS) — LLM provider for writer / cleanup /
+#                                     fs_insight profiles (Kimi K2.6).
+#   - openrouter.ai:443     (HTTPS) — registered as a provider but no profile
+#                                     currently routes to it; safe to omit.
+#   - future-of.npd.com:443     (HTTPS) — NPD External API, prod environment.
+#   - future-of-qa.npd.com:443  (HTTPS) — NPD External API, QA environment.
+#
+# Once src/llm/providers/internal_stub.py is wired to the internal
+# Circana endpoint, the three external LLM domains can be dropped from
+# the runtime allowlist.
+#
+# Runtime ingress (inbound to the container):
+#   - :8000 (HTTP) — FastAPI BFF + static frontend. Typically sits behind
+#                    a TLS-terminating reverse proxy at the cluster edge.
 
 # ── Stage 1: build frontend ───────────────────────────────────────────────
 FROM node:20-bookworm-slim AS web
 
 WORKDIR /work
 COPY web/package.json web/package-lock.json* ./
-RUN npm install --no-audit --no-fund
+# `npm ci` enforces strict lockfile use — required for reproducible
+# walled-garden builds. Do NOT replace with `npm install`; install can
+# silently update transitive versions.
+RUN npm ci --no-audit --no-fund
 
 COPY web ./
 # kit/ is already synced into web/kit/ by the host before docker build
@@ -20,7 +57,9 @@ RUN npm run build
 # ── Stage 2: runtime ──────────────────────────────────────────────────────
 FROM python:3.12-slim
 
-# System deps: Chromium for Selenium SSO (NPD login)
+# System deps: Chromium for Selenium SSO (NPD login). chromium-driver
+# is installed via apt so Selenium does not attempt a runtime
+# webdriver-manager download (that would breach the walled garden).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     chromium-driver \

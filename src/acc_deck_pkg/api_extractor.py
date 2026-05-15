@@ -18,6 +18,18 @@ Endpoints:
   GET .../api/ext/industry/{id}/forecast?timeGran=... — quarterly forecast data
 
 Base URLs are read from environment variables NPD_PROD_URL and NPD_QA_URL.
+
+──────────────────────────────────────────────────────────────────────────
+NETWORK POLICY — egress
+──────────────────────────────────────────────────────────────────────────
+Outbound HTTPS to NPD's public API (must be on the walled-garden allowlist):
+  - future-of.npd.com:443       (prod, default)   — env: NPD_PROD_URL
+  - future-of-qa.npd.com:443    (QA,   default)   — env: NPD_QA_URL
+
+Selenium uses the system Chromium binary (CHROME_BIN) and the apt-installed
+chromedriver (CHROMEDRIVER_PATH); webdriver-manager is NOT used, so there
+is no runtime download of driver binaries. Selenium's network traffic
+hits only the NPD SSO/login pages on the same hosts above.
 """
 
 import os

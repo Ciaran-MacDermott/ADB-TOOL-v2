@@ -21,6 +21,21 @@ Conventions:
 
 System prompts stay where they are (in `acc_deck_pkg/llm_insights_free.py`
 and `acc_deck_fs_pkg/prompts/*.md`) — this layer is purely transport.
+
+──────────────────────────────────────────────────────────────────────────
+NETWORK POLICY — egress
+──────────────────────────────────────────────────────────────────────────
+Every call from `complete()` resolves a profile to a provider, and the
+provider makes ONE outbound HTTPS POST. URL list lives in
+`providers/__init__.py` — keep that file as the source of truth when
+you draft the firewall allowlist. Today (May 2026):
+
+  - api.groq.com:443       brief / fast_writer / total_subheader
+  - api.moonshot.ai:443    writer / cleanup / fs_insight  (Kimi K2.6)
+  - openrouter.ai:443      registered, no profile currently routes here
+
+After `providers/internal_stub.py` is wired and `profiles.py` repointed,
+the only outbound LLM traffic will be to the internal Circana endpoint.
 """
 
 from __future__ import annotations

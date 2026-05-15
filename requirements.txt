@@ -1,29 +1,42 @@
 # Forecast Accuracy Deck Builder v2 — backend dependencies
-# Pin minor versions for reproducible builds; allow patch updates (~=)
+#
+# All versions pinned to exact (==) for walled-garden reproducibility:
+# the DMZ build machine resolves once, the resulting image is what runs
+# in production. Loose ranges would let a patch release silently change
+# what gets installed inside the container the next time it rebuilds.
+#
+# When updating: bump versions, build in DMZ, run pytest, push artifact.
+# Don't relax the == pins.
 
-# Web framework
-fastapi>=0.110.0,<1.0.0
-uvicorn[standard]>=0.27.0,<1.0.0
-pydantic>=2.6.0,<3.0.0
+# ── Web framework ───────────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
 
-# Data
-pandas>=2.0.0,<3.0.0
-numpy>=1.24.0,<2.0.0
-openpyxl>=3.1.0,<4.0.0
+# ── Data ────────────────────────────────────────────────────────────────
+pandas==2.2.3
+numpy==1.26.4
+openpyxl==3.1.5
 
-# PowerPoint
-python-pptx>=0.6.21,<1.0.0
+# ── PowerPoint ──────────────────────────────────────────────────────────
+python-pptx==1.0.2
 
-# HTTP (free LLM path: Groq + OpenRouter via direct requests)
-requests>=2.31.0,<3.0.0
-urllib3>=2.0.0,<3.0.0
+# ── HTTP (used by src/llm/providers/* and NPD api_extractor) ────────────
+requests==2.32.3
+urllib3==2.2.3
 
-# Foodservice pipeline LLM clients (acc_deck_fs_pkg)
-groq>=0.11.0,<1.0.0
-openai>=1.40.0,<2.0.0
+# ── NPD SSO login (Selenium + Chromium — system Chromium installed via
+#    Dockerfile, ChromeDriver path set via CHROMEDRIVER_PATH env var so
+#    Selenium does NOT attempt a runtime download).
+selenium==4.27.1
 
-# NPD SSO login (Selenium + Chromium — system Chromium installed via Dockerfile)
-selenium>=4.18.0,<5.0.0
+# ── Local dev — load .env file (no-op in production where env vars
+#    are injected by the orchestrator).
+python-dotenv==1.0.1
 
-# Local dev — load .env file (no-op in Docker where secrets are real env vars)
-python-dotenv>=1.0.0,<2.0.0
+# NOTE: the `groq` and `openai` SDKs were removed from this list on
+# 2026-05-15. After the src/llm/ refactor every model invocation goes
+# through `requests.post` via providers/openai_compat.py — no provider
+# SDK is imported anywhere in the codebase. Re-adding them would expand
+# the trust surface (more packages your internal PyPI mirror has to
+# vet) for zero functional gain.
