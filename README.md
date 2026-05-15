@@ -121,7 +121,15 @@ Implementation lives in `api/runs.py`: a `BoundedSemaphore` for the slot cap, pe
 
 `POST /api/runs` returns a `run_id` immediately and spawns a worker thread that acquires one of `RUN_SLOTS` (default 3) and dispatches to `acc_deck_pkg.main_meta_modes.main(...)` or `acc_deck_fs_pkg.pipeline.run_full_pipeline(...)` based on the industry's pipeline tag. The worker installs a per-thread stdout tee so every `print()` from inside the pipeline (Selenium login lines, NPD HTTP responses, GPT-brief / Kimi-write banners, per-category insights) appends to `Run.logs`. The frontend polls `GET /api/runs/{id}` every 1s — the response includes the last 200 log lines, current step, queue position+ETA when queued, and elapsed time. When state turns `done`, `GET /api/runs/{id}/download` serves the `.pptx` and (for ADB) `/download/xlsx` serves the insights workbook. `POST /api/runs/{id}/cancel` sets a `threading.Event` the pipeline checks at safe points.
 
-The frontend stashes `{session_token, run_id}` in `localStorage` with a 20-min TTL so an accidental refresh during a 10–15 min run rehydrates the in-flight status instead of forcing a re-login. Disconnect / download / TTL-expiry all clear the stash.
+### Session isolation
+
+State splits across three places so each is scoped where it makes sense:
+
+- **`sessionStorage`** — `{token, username}`, browser-window-local. Surviving a Cmd+R in the same tab keeps a 10–15 min run alive, but a **fresh tab / window / browser** opens to the Connect form. Closes the "Bob walks up to the URL on a shared machine and sees Alice's session" hole. (AIC's URL-token pattern is the other end of this dial — shareable, but the token rides in every link; this app doesn't need that, only `?run=<id>` does.)
+- **URL `?run=<id>`** — per-tab. Two tabs = two independent runs, each refresh-safe.
+- **Server** — per-user Selenium cookie cache (`npd_cookies_<env>_<sha256(username)[:12]>.pkl`) so a second user can't short-circuit SSO and inherit the first user's NPD session.
+
+A 15-min idle timer revokes the server session and clears the stash if there's no input — paused while a run is queued/running so a long build never gets killed by silence.
 
 ## Walled-garden deploy
 
