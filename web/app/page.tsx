@@ -156,61 +156,92 @@ export default function Home() {
           subtitle="Connect to NPD, pick the wave and industry, and produce a Circana-branded PowerPoint."
         />
 
-        {/* ── Step 1: Connect ─────────────────────────────────────────── */}
-        <Card className="mb-5">
-          <CardHeader>
-            <CardTitle>1 — Connect to NPD</CardTitle>
-            {connected
-              ? <Badge tone="success">Authenticated</Badge>
-              : <Badge tone="neutral">Required</Badge>}
-          </CardHeader>
-          <CardDescription>
-            Live API mode. Industries and runs are scoped to your NPD session.
-          </CardDescription>
+        {/* ── Step 1: Connect (left)  +  Run status (top-right) ───────── */}
+        <div className="mb-5 grid grid-cols-12 gap-5">
+          <Card className="col-span-12 sm:col-span-9">
+            <CardHeader>
+              <CardTitle>1 — Connect to NPD</CardTitle>
+              {connected
+                ? <Badge tone="success">Authenticated</Badge>
+                : <Badge tone="neutral">Required</Badge>}
+            </CardHeader>
+            <CardDescription>
+              Live API mode. Industries and runs are scoped to your NPD session.
+            </CardDescription>
 
-          {!connected ? (
-            <>
-              <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                <Field label="NPD username">
-                  <input
-                    className={inputCls}
-                    type="email"
-                    autoComplete="username"
-                    placeholder="your@email.com"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && username && password && onConnect()}
-                  />
-                </Field>
-                <Field label="NPD password">
-                  <input
-                    className={inputCls}
-                    type="password"
-                    autoComplete="current-password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && username && password && onConnect()}
-                  />
-                </Field>
-                <Button
-                  variant="primary"
-                  disabled={connecting || !username || !password}
-                  onClick={onConnect}
-                >
-                  {connecting ? "Connecting…" : "Connect"}
-                </Button>
+            {!connected ? (
+              <>
+                <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <Field label="NPD username">
+                    <input
+                      className={inputCls}
+                      type="email"
+                      autoComplete="username"
+                      placeholder="your@email.com"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && username && password && onConnect()}
+                    />
+                  </Field>
+                  <Field label="NPD password">
+                    <input
+                      className={inputCls}
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && username && password && onConnect()}
+                    />
+                  </Field>
+                  <Button
+                    variant="primary"
+                    disabled={connecting || !username || !password}
+                    onClick={onConnect}
+                  >
+                    {connecting ? "Connecting…" : "Connect"}
+                  </Button>
+                </div>
+                {connectError && (
+                  <p className="mt-3 text-sm text-red-700">{connectError}</p>
+                )}
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-zinc-600">
+                Signed in as <strong>{username || "session"}</strong>. {industries.length} industries available.
+              </p>
+            )}
+          </Card>
+
+          <Card variant="quiet" className="col-span-12 sm:col-span-3">
+            <CardHeader>
+              <CardTitle>Run status</CardTitle>
+              {run && <Badge tone={STATE_TONE[run.state]}>{run.state}</Badge>}
+            </CardHeader>
+            {!run ? (
+              <CardDescription>
+                {connected ? "No run yet. Submit the form to start." : "Connect to NPD to begin."}
+              </CardDescription>
+            ) : (
+              <div className="space-y-2 text-sm">
+                <Row label="Run ID"  value={<code className="text-xs">{run.run_id}</code>} />
+                <Row label="Step"    value={run.step ?? "—"} />
+                <Row label="Elapsed" value={`${run.elapsed_s.toFixed(1)}s`} />
+                {run.message && <Row label="Message" value={run.message} />}
+                {run.state === "done" && (
+                  <ButtonLink
+                    variant="success"
+                    href={api.downloadUrl(run.run_id)}
+                    download
+                    className="mt-3 w-full"
+                  >
+                    Download deck (.pptx)
+                  </ButtonLink>
+                )}
               </div>
-              {connectError && (
-                <p className="mt-3 text-sm text-red-700">{connectError}</p>
-              )}
-            </>
-          ) : (
-            <p className="mt-3 text-sm text-zinc-600">
-              Signed in as <strong>{username || "session"}</strong>. {industries.length} industries available.
-            </p>
-          )}
-        </Card>
+            )}
+          </Card>
+        </div>
 
         {/* ── Step 2: Run params ──────────────────────────────────────── */}
         {runError && (
@@ -219,8 +250,7 @@ export default function Home() {
           </Card>
         )}
 
-        <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-          <Card aria-disabled={!connected} className={!connected ? "opacity-60 pointer-events-none" : ""}>
+        <Card aria-disabled={!connected} className={!connected ? "opacity-60 pointer-events-none" : ""}>
             <CardHeader>
               <CardTitle>2 — Run parameters</CardTitle>
               {selectedIndustry && (
@@ -309,37 +339,7 @@ export default function Home() {
                 {submitting ? "Starting…" : "Run pipeline"}
               </Button>
             </div>
-          </Card>
-
-          <Card variant="quiet">
-            <CardHeader>
-              <CardTitle>Run status</CardTitle>
-              {run && <Badge tone={STATE_TONE[run.state]}>{run.state}</Badge>}
-            </CardHeader>
-            {!run ? (
-              <CardDescription>
-                {connected ? "No run yet. Submit the form to start." : "Connect to NPD to begin."}
-              </CardDescription>
-            ) : (
-              <div className="space-y-2 text-sm">
-                <Row label="Run ID"  value={<code className="text-xs">{run.run_id}</code>} />
-                <Row label="Step"    value={run.step ?? "—"} />
-                <Row label="Elapsed" value={`${run.elapsed_s.toFixed(1)}s`} />
-                {run.message && <Row label="Message" value={run.message} />}
-                {run.state === "done" && (
-                  <ButtonLink
-                    variant="success"
-                    href={api.downloadUrl(run.run_id)}
-                    download
-                    className="mt-3 w-full"
-                  >
-                    Download deck (.pptx)
-                  </ButtonLink>
-                )}
-              </div>
-            )}
-          </Card>
-        </div>
+        </Card>
       </AppShell>
     </>
   );
