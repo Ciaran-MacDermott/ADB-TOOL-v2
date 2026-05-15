@@ -107,7 +107,7 @@ After the internal-LLM swap (see `src/llm/providers/internal_stub.py`), the thre
 - `src/acc_deck_pkg/api_extractor.py` and `src/acc_deck_fs_pkg/api_extractor_v2.py` — NPD endpoints
 - `Dockerfile` — build-time + runtime port summary at the top
 
-**Known walled-garden gotcha — `template.pptx` is a Git LFS pointer.** `src/acc_deck_fs_pkg/Templates/template.pptx` is currently a 131-byte LFS pointer file. The pipeline opens it as a binary `.pptx` and will fail on the LFS placeholder. Either install `git-lfs` and pull, or commit the binary directly out of LFS, before deploying into a walled-garden CI that lacks LFS access.
+**Templates are committed as regular binaries**, not LFS — both `src/acc_deck_fs_pkg/Templates/template.pptx` and `pipeline_config/pipeline_config/template.pptx` ship as real `.pptx` blobs in the git tree. Walled-garden CI without `git-lfs` access can clone and build without setup. If you ever re-add LFS tracking, restore those two files as regular blobs before pushing or the pipeline will fail at deck-generation time.
 
 ## Migrating from v1
 
