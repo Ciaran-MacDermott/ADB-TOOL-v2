@@ -39,7 +39,7 @@ npm install
 npm run dev          # Next on :3002
 ```
 
-The frontend hits the URL in `NEXT_PUBLIC_API_BASE` (set to `http://localhost:8002` for dev); CORS is opened to `ADB_CORS_ORIGINS` (set to `http://localhost:3002` for dev). Both env vars default to empty so production single-port deploy is same-origin with no CORS surface.
+The frontend hits the URL in `NEXT_PUBLIC_API_BASE` (committed in `web/.env.development` as `http://localhost:8002` — Next.js auto-loads this in dev). The backend opens CORS to whatever's in `ADB_CORS_ORIGINS` from the project-root `.env` (set to `http://localhost:3002` for dev). Both env vars default to empty so production single-port deploy is same-origin with no CORS surface.
 
 Ports 3002 / 8002 are chosen to avoid clashing with other local Next + FastAPI projects that run on the defaults 3000 / 8000.
 
