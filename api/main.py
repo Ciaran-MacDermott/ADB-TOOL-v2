@@ -480,6 +480,14 @@ def _run_adb_pipeline(
     )
 
 
+# Serialises the patch-call-restore dance against fs_pipeline's
+# module-level PIPELINE_CONFIG dict. Two concurrent FS runs would race
+# on output_path / input_quarter / etc. without this lock. The ADB
+# pipeline isn't affected — its main() takes runtime_config as a
+# parameter so each call is naturally isolated.
+_FS_CONFIG_LOCK = threading.Lock()
+
+
 def _run_fs_pipeline(
     *,
     run,
@@ -495,24 +503,36 @@ def _run_fs_pipeline(
     # Normalise "Food Service" → "Foodservice" for cover/footers.
     project_display = industry_label.replace("Food Service", "Foodservice")
 
-    fs_pipeline.PIPELINE_CONFIG["input_year"]       = year
-    fs_pipeline.PIPELINE_CONFIG["input_quarter"]    = quarter
-    fs_pipeline.PIPELINE_CONFIG["groq_api_key"]     = os.getenv("GROQ_API_KEY", "")
-    fs_pipeline.PIPELINE_CONFIG["moonshot_api_key"] = os.getenv("MOONSHOT_API_KEY", "")
-    fs_pipeline.PIPELINE_CONFIG["output_path"]      = str(deck_path)
-    fs_pipeline.PIPELINE_CONFIG["project_display"]  = project_display
-
     if run.cancel_event.is_set():
         return
 
     print(f"[Extracting] Foodservice pipeline for {industry_label}...")
     run_registry.set_state(run, step="extracting")
-    fs_pipeline.run_full_pipeline(
-        prod_session=prod_session,
-        qa_session=qa_session,
-        industry_id=industry_id,
-        extract=True,
-    )
+
+    # Snapshot the global config, patch in this run's values, call the
+    # pipeline, then restore. The lock guarantees only one FS worker
+    # holds the global at a time — concurrent FS runs queue behind it
+    # rather than race. Lock is held for the duration of the run; FS
+    # decks are quick (a few minutes) so this rarely matters in
+    # practice, but it guarantees correctness when it does.
+    with _FS_CONFIG_LOCK:
+        original = dict(fs_pipeline.PIPELINE_CONFIG)
+        fs_pipeline.PIPELINE_CONFIG["input_year"]       = year
+        fs_pipeline.PIPELINE_CONFIG["input_quarter"]    = quarter
+        fs_pipeline.PIPELINE_CONFIG["groq_api_key"]     = os.getenv("GROQ_API_KEY", "")
+        fs_pipeline.PIPELINE_CONFIG["moonshot_api_key"] = os.getenv("MOONSHOT_API_KEY", "")
+        fs_pipeline.PIPELINE_CONFIG["output_path"]      = str(deck_path)
+        fs_pipeline.PIPELINE_CONFIG["project_display"]  = project_display
+        try:
+            fs_pipeline.run_full_pipeline(
+                prod_session=prod_session,
+                qa_session=qa_session,
+                industry_id=industry_id,
+                extract=True,
+            )
+        finally:
+            fs_pipeline.PIPELINE_CONFIG.clear()
+            fs_pipeline.PIPELINE_CONFIG.update(original)
 
 
 @app.get("/api/runs/{run_id}", response_model=RunStatus)

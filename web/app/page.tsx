@@ -21,28 +21,37 @@ import { api, type Industry, type Levels, type RunStatus } from "@/lib/api";
 const QUARTERS = ["Q1", "Q2", "Q3", "Q4"] as const;
 const YEARS = Array.from({ length: 8 }, (_, i) => 2024 + i);
 
-// ── Page persistence ──────────────────────────────────────────────────
-// Stash {token, username, run_id} in localStorage so a Cmd+R during a
-// 10–15 min run doesn't lose visibility. Backend keeps the session +
-// run alive for 60 min idle, so we just need the client-side hooks.
+// ── Persistence model ─────────────────────────────────────────────────
+// sessionStorage -> {token, username}  scoped to THIS browser window.
+//                                       New tab/window = Connect form.
+//                                       Refresh within the same tab still
+//                                       restores. Closing the tab drops it.
+// URL ?run=<id> -> per-tab run instance.
+//
+// Deliberately NOT localStorage: a shared machine where User A signs in
+// and walks away should not auto-rehydrate User B as User A when they
+// open a fresh window/tab at the same URL. (Same-tab idle hijack is a
+// separate concern — needs an idle-timeout, not in scope here.)
+//
+// Backend Session + Run live ~60 min idle; the client TTL below is just
+// a sanity bound for the in-tab stash.
 const STORAGE_KEY = "adb_v2_session";
-const STORAGE_TTL_MS = 20 * 60 * 1000;   // 20 minutes — user's spec
+const STORAGE_TTL_MS = 20 * 60 * 1000;
 
 type StoredSession = {
   token:    string;
   username: string;
-  run_id:   string | null;
   savedAt:  number;
 };
 
 function readStash(): StoredSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw) as StoredSession;
     if (!data?.token || Date.now() - data.savedAt > STORAGE_TTL_MS) {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.sessionStorage.removeItem(STORAGE_KEY);
       return null;
     }
     return data;
@@ -54,15 +63,34 @@ function readStash(): StoredSession | null {
 function writeStash(data: StoredSession) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {
-    // localStorage quota / disabled — silent fail is fine.
+    // sessionStorage quota / disabled — silent fail is fine.
   }
 }
 
 function clearStash() {
   if (typeof window === "undefined") return;
-  try { window.localStorage.removeItem(STORAGE_KEY); } catch {}
+  try { window.sessionStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
+// ── URL ?run=<id> helpers ──────────────────────────────────────────────
+// We manipulate the URL via window.history directly rather than the Next
+// router, because changing a query param shouldn't trigger any of Next's
+// re-render machinery — it's just a per-tab bookmark for the polling
+// effect to latch onto.
+function readRunIdFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const id = new URLSearchParams(window.location.search).get("run");
+  return id && /^[0-9a-f]{4,}$/i.test(id) ? id : null;
+}
+
+function setRunIdInUrl(runId: string | null) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (runId) url.searchParams.set("run", runId);
+  else       url.searchParams.delete("run");
+  window.history.replaceState({}, "", url.toString());
 }
 
 const STATE_TONE: Record<RunStatus["state"], "info" | "success" | "warning" | "error" | "neutral"> = {
@@ -120,41 +148,45 @@ export default function Home() {
   const isFs = selectedIndustry?.pipeline === "fs";
   const inFlight = run?.state === "queued" || run?.state === "running";
 
-  // Rehydrate session + in-flight run from localStorage on mount.
-  // Validates the token by calling /api/industries — if the backend
-  // rejected it (expired / restarted), clear the stash and show Connect.
+  // Rehydrate on mount:
+  //   token + username from localStorage (shared across tabs)
+  //   run_id from URL ?run=<id>           (per-tab instance)
+  // Validate the token via /api/industries before trusting it; if the
+  // backend rejected it, clear the stash and show Connect.
   useEffect(() => {
     const stash = readStash();
     if (!stash) return;
     let cancelled = false;
+    const urlRunId = readRunIdFromUrl();
     api.industries(stash.token)
       .then(() => {
         if (cancelled) return;
         setToken(stash.token);
         setUsername(stash.username);
-        if (stash.run_id) {
-          api.getRun(stash.token, stash.run_id)
+        if (urlRunId) {
+          api.getRun(stash.token, urlRunId)
             .then((r) => !cancelled && setRun(r))
-            .catch(() => undefined);   // run was reaped — token still good
+            .catch(() => setRunIdInUrl(null)); // run was reaped — drop stale URL
         }
       })
       .catch(() => clearStash());
     return () => { cancelled = true; };
   }, []);
 
-  // Persist whenever the relevant pieces change.
+  // Persist token + username whenever they change. run_id lives in the
+  // URL, not here, so two tabs share the login but each owns its run.
   useEffect(() => {
     if (!token) {
       clearStash();
       return;
     }
-    writeStash({
-      token,
-      username,
-      run_id: run?.run_id ?? null,
-      savedAt: Date.now(),
-    });
-  }, [token, username, run?.run_id]);
+    writeStash({ token, username, savedAt: Date.now() });
+  }, [token, username]);
+
+  // Keep ?run=<id> in sync with the current run.
+  useEffect(() => {
+    setRunIdInUrl(run?.run_id ?? null);
+  }, [run?.run_id]);
 
   // Load industries once we have a token.
   useEffect(() => {
@@ -232,6 +264,7 @@ export default function Home() {
   async function onDisconnect() {
     if (token) await api.disconnect(token).catch(() => undefined);
     clearStash();
+    setRunIdInUrl(null);
     setToken(null);
     setRun(null);
     setRunError(null);
@@ -581,7 +614,6 @@ export default function Home() {
                   variant="success"
                   href={api.downloadUrl(run.run_id)}
                   download
-                  onClick={clearStash}
                 >
                   Download deck (.pptx)
                 </ButtonLink>
@@ -590,7 +622,6 @@ export default function Home() {
                     variant="ghost"
                     href={api.downloadXlsxUrl(run.run_id)}
                     download
-                    onClick={clearStash}
                   >
                     Download insights (.xlsx)
                   </ButtonLink>

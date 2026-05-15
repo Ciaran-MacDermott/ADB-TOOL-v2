@@ -32,6 +32,7 @@ is no runtime download of driver binaries. Selenium's network traffic
 hits only the NPD SSO/login pages on the same hosts above.
 """
 
+import hashlib
 import os
 import sys
 import time
@@ -110,30 +111,42 @@ def _writable_base() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def _cookie_path(env_key: str) -> Path:
+def _user_tag(username: str) -> str:
+    """Short stable tag for the cookie filename. We hash rather than use
+    the email directly so the on-disk path is filesystem-safe and doesn't
+    expose user identifiers to anyone with read access to /app/Cookies."""
+    norm = (username or "").strip().lower().encode("utf-8")
+    return hashlib.sha256(norm).hexdigest()[:12]
+
+
+def _cookie_path(env_key: str, username: str = "") -> Path:
+    """Per-user cookie path. Without the user tag, a second user
+    connecting within the 50-min cache window would short-circuit
+    Selenium and inherit the first user's NPD session — a real cross-
+    user leak. Tagging by `sha256(username)[:12]` keeps each user's
+    cookies isolated while staying filesystem-safe."""
     base = _writable_base()
-    # When NPD_COOKIES_DIR is set the env var IS the cookies dir.
-    # Otherwise nest under ./Cookies/ as the legacy layout expects.
+    tag = _user_tag(username) if username else "shared"
     if os.getenv("NPD_COOKIES_DIR"):
-        path = base / f"npd_cookies_{env_key}.pkl"
+        path = base / f"npd_cookies_{env_key}_{tag}.pkl"
     else:
-        path = base / "Cookies" / f"npd_cookies_{env_key}.pkl"
+        path = base / "Cookies" / f"npd_cookies_{env_key}_{tag}.pkl"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def _save_cookies(cookies: list, env_key: str):
+def _save_cookies(cookies: list, env_key: str, username: str = ""):
     data = {
         'cookies': cookies,
         'expires': datetime.now() + timedelta(minutes=COOKIE_EXPIRY_MINUTES),
     }
-    with open(_cookie_path(env_key), 'wb') as f:
+    with open(_cookie_path(env_key, username), 'wb') as f:
         pickle.dump(data, f)
     print(f"  Cookies saved (valid for {COOKIE_EXPIRY_MINUTES} minutes)")
 
 
-def _load_cookies(env_key: str) -> Optional[list]:
-    path = _cookie_path(env_key)
+def _load_cookies(env_key: str, username: str = "") -> Optional[list]:
+    path = _cookie_path(env_key, username)
     if not path.exists():
         return None
     try:
@@ -288,6 +301,10 @@ def connect(username: str, password: str, env_key: str) -> Optional[requests.Ses
     """
     Authenticate to an NPD environment, reusing cached cookies if still valid.
 
+    Cookie cache is scoped per-user (filename includes a hash of the
+    username) so a second user can't short-circuit Selenium and inherit
+    the first user's NPD session.
+
     Args:
         username: NPD login username.
         password: NPD login password.
@@ -299,14 +316,14 @@ def connect(username: str, password: str, env_key: str) -> Optional[requests.Ses
     env = _get_environments()[env_key]
     print(f"\n  Connecting to {env['name']}...")
 
-    cookies = _load_cookies(env_key)
+    cookies = _load_cookies(env_key, username)
 
     if cookies is None:
         print(f"  No valid cached cookies — running Selenium SSO login...")
         cookies = _selenium_login(username, password, env_key)
         if not cookies:
             return None
-        _save_cookies(cookies, env_key)
+        _save_cookies(cookies, env_key, username)
     else:
         print(f"  Using cached cookies")
 
