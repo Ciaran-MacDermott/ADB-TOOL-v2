@@ -1,17 +1,19 @@
 # Forecast Accuracy Deck Builder — v2
 
-#### Long story short the whole premise of this architecture came from meeting analysts (and me actually working on the team and suffering thr QC production week slog)
+> Long story short, the whole premise of this architecture came from meeting analysts (and me actually working on the team and suffering the QC production week slog).
 
-It turns out we already have a proof of truth on the QA site which gets QC'd prior to generating these client pptx files.
-However these processes were always either treated in isolation or done by different teams.
-This whole pipeline was designed to cut out all this waste by hitting the classic sweetspot of when QA is validated but before being pushed to PROD..(I dealt with this many times in my previous role before monthly database refreshes)
-----------------------------------------------------------
-#### IPO LOGIC
-Input: QA and Prod (last quarters non refreshed data)
-Process : Pretty much a comparsion in a YoT% metric (more scalable and client friendly)
-Generates Outout: PowerPoint forecast vs actuals accuracy decks from live NPD Future of dashboard data.
+It turns out we already have a proof of truth on the QA site which gets QC'd prior to generating these client `.pptx` files. However, these processes were always either treated in isolation or done by different teams. This whole pipeline was designed to cut out all this waste by hitting the classic sweet spot of when QA is validated but before being pushed to PROD. (I dealt with this many times in my previous role before monthly database refreshes.)
 
-------------------------------------------------------------
+---
+
+### IPO logic
+
+- **Input** — QA and Prod (last quarter's non-refreshed data)
+- **Process** — pretty much a comparison on a YoT% metric (more scalable and client-friendly)
+- **Output** — PowerPoint forecast-vs-actuals accuracy decks from live NPD Future-of dashboard data
+
+---
+
 This is an enhancement on a previously 2x production validation pipeline:
 
 **v2** = same domain logic as the original [ADB-TOOL](https://github.com/Ciaran-MacDermott/ADB-TOOL), rebuilt on a Next.js + FastAPI shape. Streamlit replaced with a Next.js frontend served by the FastAPI BFF on a single port.
