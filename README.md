@@ -4,6 +4,8 @@
 
 It turns out we already have a proof of truth on the QA site which gets QC'd prior to generating these client `.pptx` files. However, these processes were always either treated in isolation or done by different teams. This whole pipeline was designed to cut out all this waste by hitting the classic sweet spot of when QA is validated but before being pushed to PROD. (I dealt with this many times in my previous role before monthly database refreshes.)
 
+Also similarly to other analytics automation initiatives I've led, this started as an exe based local solution, ingesting csv/excel files. As ther future of project covers over 25 industries across the globe there were all sorts of formatting inconsistencies to deal with in this pipeline.. It turns out in a similar vein, the web development dashboard team had already dealt with this hurdle years ago, where through cooperating witht hem to develop a pretty sikmple API flow we avoided this data ingestion hurdle and avoided (post-facto) redundant workflows.
+
 ---
 
 ### IPO logic
