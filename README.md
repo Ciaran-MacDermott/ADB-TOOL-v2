@@ -1,5 +1,7 @@
 # Forecast Accuracy Deck Builder — v2
+
 #### Long story short the whole premise of this architecture came from meeting analysts (and me actually working on the team and suffering thr QC production week slog)
+
 It turns out we already have a proof of truth on the QA site which gets QC'd prior to generating these client pptx files.
 However these processes were always either treated in isolation or done by different teams.
 This whole pipeline was designed to cut out all this waste by hitting the classic sweetspot of when QA is validated but before being pushed to PROD..(I dealt with this many times in my previous role before monthly database refreshes)
