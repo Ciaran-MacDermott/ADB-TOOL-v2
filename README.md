@@ -22,7 +22,7 @@ This is an enhancement on a previously 2x production validation pipeline:
 
 ## Layout
 
-Standard micro-web-app split: a Python **backend** (FastAPI BFF + pipeline code + tests) and a Next.js **frontend** that static-exports to `frontend/out/`. The Dockerfile bundles both into a single-port image, so production is one process behind one reverse proxy.
+A Python **backend** handles the data, LLM calls, and deck building; a Next.js **frontend** handles the UI. The Dockerfile packs both into one container so the whole app runs as a single process on one port.
 
 ```
 backend/                Python — FastAPI BFF + pipelines, one process
