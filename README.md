@@ -22,29 +22,26 @@ This is an enhancement on a previously 2x production validation pipeline:
 
 ## Layout
 
+Standard micro-web-app split: a Python **backend** (FastAPI BFF + pipeline code + tests) and a Next.js **frontend** that static-exports to `frontend/out/`. The Dockerfile bundles both into a single-port image, so production is one process behind one reverse proxy.
+
 ```
-backend/                  Python — one FastAPI process, runs everything
-  api/                    HTTP surface (the BFF)
-    main.py               app entry, route handlers, static-frontend mount,
-                            industry → pipeline routing (see "Two pipelines")
-    runs.py               in-process run registry (slot semaphore, log tee, reaper)
-    sessions.py           in-memory NPD session store (Selenium cookies, per-user)
-    schemas.py            Pydantic request/response models
-  src/                    domain logic — added to sys.path so imports are flat
-    acc_deck_pkg/         ADB pipeline — general industries (NOT food-service)
-    acc_deck_fs_pkg/      Foodservice pipeline — food-service-{us,canada,australia}
-    llm/                  unified LLM client — every model call routes through here
-  config/                 ADB pipeline's bundled assets (template.pptx, prompts,
-                            config.json). The FS pipeline keeps its own assets
-                            inside acc_deck_fs_pkg/ — see "Two pipelines".
-  tests/                  pytest suite
-frontend/                 Next.js 15 + React 19 + Tailwind, static-exports to out/
-  app/                    Next routes (App Router — currently a single-page UI)
-  kit/                    in-tree UI kit (Button, Card, AppShell, …) — see below
-  lib/                    BFF client (`api.ts`)
-  public/                 static assets (logo)
-Dockerfile                two-stage build: Node → frontend/out, Python → /app/{backend,frontend}
+backend/                Python — FastAPI BFF + pipelines, one process
+  api/                  HTTP surface — route handlers, run registry, sessions
+  src/
+    acc_deck_pkg/       ADB pipeline (general industries)
+    acc_deck_fs_pkg/    Foodservice pipeline (food-service-{us,canada,australia})
+    llm/                unified LLM client — single seam for every model call
+  config/               ADB pipeline assets (template.pptx, prompts, config.json)
+  tests/                pytest suite
+frontend/               Next.js 15 + React 19 + Tailwind, static-exports to out/
+  app/                  Next routes (App Router)
+  kit/                  in-tree UI kit (Button, Card, AppShell, …)
+  lib/                  BFF client (api.ts)
+  public/               static assets (logo)
+Dockerfile              two-stage build: frontend/out + backend → single-port image
 ```
+
+Foodservice keeps its own templates / prompts / images inside `acc_deck_fs_pkg/` rather than under `backend/config/` — see [Two pipelines](#two-pipelines--why-the-adb--foodservice-split) for why. Per-file pointers for common edits are in [Where to refactor X?](#where-to-refactor-x).
 
 ## Two pipelines — why the ADB / Foodservice split?
 
