@@ -3,12 +3,13 @@ FastAPI BFF for the Forecast Accuracy Deck Builder (v2).
 
 Mirrors the data_ingester / AIC shape:
   - Dev: Next runs on :3002 and hits this on :8002 (CORS allows it).
-  - Prod: `npm run build` produces web/out/, FastAPI serves it at /,
+  - Prod: `npm run build` produces frontend/out/, FastAPI serves it at /,
     the whole app runs on a single port.
 
-The deck-building engine lives in src/acc_deck_pkg and src/acc_deck_fs_pkg
-(ported from the original Streamlit app). This BFF provides a thin REST
-surface over it: kick off runs, poll status, download the PPTX.
+The deck-building engine lives in backend/src/acc_deck_pkg and
+backend/src/acc_deck_fs_pkg (ported from the original Streamlit app).
+This BFF provides a thin REST surface over it: kick off runs, poll
+status, download the PPTX.
 
 ──────────────────────────────────────────────────────────────────────────
 NETWORK POLICY
@@ -19,10 +20,10 @@ Ingress (inbound to this process):
   :3002 (HTTP) — only in dev (Next.js dev server with CORS allow).
 
 Egress (outbound — must be reachable from the runtime environment):
-  - LLM providers: see src/llm/providers/__init__.py for the current
-    URLs (api.groq.com, api.moonshot.ai). Once the internal endpoint in
-    src/llm/providers/internal_stub.py is wired, these can be removed
-    from the allowlist.
+  - LLM providers: see backend/src/llm/providers/__init__.py for the
+    current URLs (api.groq.com, api.moonshot.ai). Once the internal
+    endpoint in backend/src/llm/providers/internal_stub.py is wired,
+    these can be removed from the allowlist.
   - NPD External API:
       * future-of.npd.com:443     (prod)   — overridable via NPD_PROD_URL
       * future-of-qa.npd.com:443  (QA)     — overridable via NPD_QA_URL
@@ -59,12 +60,13 @@ try:
 except Exception:
     pass
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT    = BACKEND_ROOT.parent
+sys.path.insert(0, str(BACKEND_ROOT))
 # The pipeline package imports its sub-modules as ``from acc_deck_pkg.X``
 # rather than ``from src.acc_deck_pkg.X``, so we also need ``src/`` on the
 # path. Same reason ``src/llm/`` works without a ``src.`` prefix.
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(BACKEND_ROOT / "src"))
 
 from api import runs as run_registry
 from api import sessions as session_registry
@@ -106,7 +108,7 @@ def _industry_pipeline(slug: str) -> str:
 
 
 # ── Pipeline config (ADB) ─────────────────────────────────────────────
-_PIPELINE_CONFIG_DIR = PROJECT_ROOT / "pipeline_config" / "pipeline_config"
+_PIPELINE_CONFIG_DIR = BACKEND_ROOT / "config"
 _TEMPLATE_PPTX       = _PIPELINE_CONFIG_DIR / "template.pptx"
 _CONFIG_JSON         = _PIPELINE_CONFIG_DIR / "config.json"
 
@@ -578,6 +580,6 @@ def download_xlsx(run_id: str):
 
 # ── Static frontend (prod only) ───────────────────────────────────────────
 # In dev this directory may not exist — Next is serving on :3002.
-WEB_OUT = PROJECT_ROOT / "web" / "out"
+WEB_OUT = REPO_ROOT / "frontend" / "out"
 if WEB_OUT.exists():
     app.mount("/", StaticFiles(directory=str(WEB_OUT), html=True), name="web")

@@ -1,7 +1,7 @@
-// Barrel export for the Circana kit. Local imports inside <app>/web/kit/.
+// Barrel export for the Circana kit. Local imports inside <app>/frontend/kit/.
 // Add new components here so app code can import them from "@/kit".
 
-export { cn } from "./lib/cn";
+export { cn } from "./util/cn";
 
 // ── UI primitives ──────────────────────────────────────────────────────
 export { Button, ButtonLink } from "./components/ui/Button";

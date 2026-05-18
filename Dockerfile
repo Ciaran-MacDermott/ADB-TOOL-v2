@@ -1,9 +1,9 @@
 # Forecast Accuracy Deck Builder v2 — single-port Docker build.
 #
 # Build context expected: project root (~/Downloads/ADB-TOOL-v2).
-# Two-stage build: Node compiles the Next.js frontend to web/out/, then
-# the Python image copies it in alongside the FastAPI BFF and serves the
-# whole app on port 8002.
+# Two-stage build: Node compiles the Next.js frontend to frontend/out/,
+# then the Python image copies it in alongside the FastAPI BFF and
+# serves the whole app on port 8002.
 #
 # ─── Deployment model ──────────────────────────────────────────────────
 # Build can run on any host with normal egress; the resulting image is
@@ -15,14 +15,14 @@
 #   - registry.npmjs.org             npm ci  (Next.js, React, Tailwind, etc.)
 #   - pypi.org / files.pythonhosted  pip install -r requirements.txt
 #   - fonts.googleapis.com / gstatic next/font/google downloads Inter at build time
-#                                    and inlines it under web/out/_next/static/media/
+#                                    and inlines it under frontend/out/_next/static/media/
 #                                    so the running container makes ZERO calls to
 #                                    Google Fonts.
 #
 # Runtime egress (must be reachable from the container):
 #   - api.groq.com:443      (HTTPS) — LLM provider for brief / fast_writer /
 #                                     total_subheader profiles. See
-#                                     src/llm/providers/__init__.py.
+#                                     backend/src/llm/providers/__init__.py.
 #   - api.moonshot.ai:443   (HTTPS) — LLM provider for writer / cleanup /
 #                                     fs_insight profiles (Kimi K2.6).
 #   - openrouter.ai:443     (HTTPS) — registered as a provider but no profile
@@ -38,13 +38,13 @@
 FROM node:20-bookworm-slim AS web
 
 WORKDIR /work
-COPY web/package.json web/package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 # `npm ci` enforces strict lockfile use for reproducible builds.
 # Do NOT replace with `npm install`; install can silently update
 # transitive versions.
 RUN npm ci --no-audit --no-fund
 
-COPY web ./
+COPY frontend ./
 RUN npm run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────
@@ -71,12 +71,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY api            ./api
-COPY src            ./src
-COPY pipeline_config ./pipeline_config
+COPY backend ./backend
 
-# Built frontend lives at /app/web/out/ — api/main.py mounts it at /.
-COPY --from=web /work/out ./web/out
+# Built frontend lives at /app/frontend/out/ — backend/api/main.py mounts it at /.
+COPY --from=web /work/out ./frontend/out
 
 RUN mkdir -p /app/Cookies \
     && useradd -m -u 1000 user \
@@ -89,6 +87,6 @@ EXPOSE 8002
 # reverse proxy (which terminates TLS) for X-Forwarded-* so the FastAPI
 # request.url reflects the public scheme/host. Restrict to internal
 # proxy IPs in stricter environments by replacing "*" with that CIDR.
-CMD ["uvicorn", "api.main:app", \
+CMD ["uvicorn", "backend.api.main:app", \
      "--host", "0.0.0.0", "--port", "8002", \
      "--proxy-headers", "--forwarded-allow-ips", "*"]

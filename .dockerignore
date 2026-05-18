@@ -2,13 +2,13 @@
 .venv/
 venv/
 node_modules/
-web/.next/
-web/out/
+frontend/.next/
+frontend/out/
 __pycache__/
 *.pyc
 .DS_Store
 .env
 .env.local
 docs/
-tests/
+backend/tests/
 legacy/

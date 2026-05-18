@@ -36,7 +36,7 @@ from acc_deck_fs_pkg.llm_insights import generate_all_insights, apply_insights_t
 # PATHS
 # ============================================================================
 
-# _BASE_DIR: package directory containing bundled assets (Templates/, Images/).
+# _BASE_DIR: package directory containing bundled assets (templates/, images/).
 # _WRITABLE_DIR: user-writable data at runtime — CSVs land here.
 #   Override via env FS_WRITABLE_DIR (Streamlit sets this to a per-run tempdir).
 _BASE_DIR     = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
@@ -44,8 +44,8 @@ _WRITABLE_DIR = Path(os.environ.get("FS_WRITABLE_DIR", str(_BASE_DIR)))
 
 DATA_DIR = Path(__file__).parent   # acc_deck_fs_pkg/ — for config.json and module-relative reads
 
-TEMPLATE_PATH = _BASE_DIR     / "Templates" / "template.pptx"
-INTRO_IMAGE   = _BASE_DIR     / "Images"    / "food service title img.jpg"
+TEMPLATE_PATH = _BASE_DIR     / "templates" / "template.pptx"
+INTRO_IMAGE   = _BASE_DIR     / "images"    / "food service title img.jpg"
 FORECAST_CSV  = _WRITABLE_DIR / "Dashboard API data" / "forecast_full.csv"
 ACTUALS_CSV   = _WRITABLE_DIR / "Dashboard API data" / "actuals_full.csv"
 

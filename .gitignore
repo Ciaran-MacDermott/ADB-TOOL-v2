@@ -13,10 +13,10 @@ venv/
 
 # ── Node / Next ─────────────────────────────────────────────────────────
 node_modules/
-web/.next/
-web/out/
-web/next-env.d.ts.tsbuildinfo
-web/tsconfig.tsbuildinfo
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
 
 # ── Editor / OS ─────────────────────────────────────────────────────────
 .DS_Store
